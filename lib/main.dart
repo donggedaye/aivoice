@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'features/record/record_page.dart';
+
 void main() {
   runApp(const ProviderScope(child: AivoiceApp()));
 }
@@ -15,9 +17,7 @@ class AivoiceApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
-      home: const Scaffold(
-        body: Center(child: Text('AI 工作副駕駛')),
-      ),
+      home: const RecordPage(),
     );
   }
 }

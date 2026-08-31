@@ -122,7 +122,13 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 ## 当前进度
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
 - 已完成 9/1：工程初始化、Git、`flutter analyze` 无错、`flutter build apk --debug` 产出 APK。
-- 下一项：9/2 录音（Kotlin 前台服务、30 秒分片、Opus/AAC、波形与计时）。
+- 9/2 代码已完成，**未打勾**：完成标准「锁屏录 20 分钟不丢」必须真机实测，我验证不到。
+  已做：`RecordingService`（AudioRecord 全程不停、AAC-LC ADTS 裸流、每 30 秒轮替输出档、
+  前台服务 + PARTIAL_WAKE_LOCK）、`RecordingChannel`（权限、start/stop/state、amplitude/chunk 事件）、
+  录音页（计时、波形、分片数）、结束后从 ADTS 帧数实测总时长、一键把分片拼成 `full.aac`。
+  音频参数：16 kHz 单声道 AAC-LC 32 kbps；分片档名 `chunk_%04d.aac`，位于
+  `<filesDir>/recordings/<timestamp>/`。
+- 下一项：真机跑完 20 分钟锁屏测试 → 打勾 9/2 → 9/3 sherpa-onnx。
 - 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter（+ dev: drift_dev / build_runner）。
   只写进 pubspec，未写代码、未跑 codegen。sherpa_onnx 留到 9/3，opencc 留到 9/4。
   `sqlite3_flutter_libs` 0.6.0+eol 是空包（sqlite3 3.x 改用 build hooks），已删直接依赖；
