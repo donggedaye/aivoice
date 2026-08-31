@@ -60,6 +60,11 @@ class RecordingChannel {
             path: map['path'] as String,
             index: map['index'] as int,
           );
+        case 'stopped':
+          return StoppedEvent(
+            interrupted: map['interrupted'] as bool? ?? false,
+            message: map['message'] as String?,
+          );
         default:
           return RecordingErrorEvent(map['message'] as String? ?? 'unknown');
       }

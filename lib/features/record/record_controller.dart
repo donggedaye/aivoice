@@ -137,22 +137,11 @@ class RecordController extends Notifier<RecordState> {
     try {
       await recorder.stop();
       await _waitUntilStopped(recorder.isRecording);
-      await _subscription?.cancel();
-      _subscription = null;
-
-      final recording = state.current;
-      final summary =
-          recording == null ? null : await recorder.summarize(recording);
-
-      state = state.copyWith(
-        isRecording: false,
-        busy: false,
-        summary: summary,
-        chunkCount: summary?.chunkCount ?? state.chunkCount,
-      );
     } catch (e) {
       state = state.copyWith(isRecording: false, busy: false, error: e.toString());
+      return;
     }
+    await _finalize();
   }
 
   /// 服務要把最後一片寫完才會停。最多等 5 秒。
@@ -160,6 +149,34 @@ class RecordController extends Notifier<RecordState> {
     for (var i = 0; i < 50; i++) {
       if (!await isRecording()) return;
       await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  /// 收尾：關掉事件訂閱、量測分片、離開錄音狀態。
+  /// 使用者按停止與被系統打斷都走這裡，UI 才不會卡在「錄音中」。
+  Future<void> _finalize({String? interruption}) async {
+    state = state.copyWith(busy: true);
+    await _subscription?.cancel();
+    _subscription = null;
+
+    final recording = state.current;
+    try {
+      final summary =
+          recording == null ? null : await ref.read(recordAudioProvider).summarize(recording);
+      state = state.copyWith(
+        isRecording: false,
+        busy: false,
+        summary: summary,
+        chunkCount: summary?.chunkCount ?? state.chunkCount,
+        error: interruption,
+        clearError: interruption == null,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isRecording: false,
+        busy: false,
+        error: interruption ?? e.toString(),
+      );
     }
   }
 
@@ -197,6 +214,15 @@ class RecordController extends Notifier<RecordState> {
         state = state.copyWith(chunkCount: index + 1);
       case RecordingErrorEvent(:final message):
         state = state.copyWith(error: message);
+      case StoppedEvent(:final interrupted, :final message):
+        // 使用者按的停止由 _stop() 收尾，這裡只處理沒人要求的結束。
+        if (!state.isRecording || state.busy) return;
+        unawaited(
+          _finalize(
+            interruption:
+                interrupted ? '錄音被系統中斷${message == null ? '' : '：$message'}' : null,
+          ),
+        );
     }
   }
 }

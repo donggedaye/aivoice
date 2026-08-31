@@ -89,3 +89,12 @@ class RecordingErrorEvent extends RecordingEvent {
 
   final String message;
 }
+
+/// 錄音迴圈結束。[interrupted] 為 true 代表不是使用者按停止，
+/// 而是被系統打斷（權限被撤回、音訊裝置被搶走）。
+class StoppedEvent extends RecordingEvent {
+  const StoppedEvent({required this.interrupted, this.message});
+
+  final bool interrupted;
+  final String? message;
+}

@@ -15,7 +15,9 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import java.io.File
 import java.io.FileOutputStream
@@ -33,6 +35,12 @@ class RecordingService : Service() {
         fun onAmplitude(rms: Double, elapsedMs: Long)
         fun onChunk(path: String, index: Int)
         fun onError(message: String)
+
+        /**
+         * 錄音迴圈結束。[interrupted] 為 true 代表不是使用者按停止，
+         * 而是被系統打斷（權限被撤回、音訊裝置被搶走、例外）。
+         */
+        fun onStopped(interrupted: Boolean, message: String?)
     }
 
     companion object {
@@ -72,6 +80,10 @@ class RecordingService : Service() {
     @Volatile
     private var running = false
 
+    /** 只有走 ACTION_STOP 才算使用者主動停止；被系統回收服務不算。 */
+    @Volatile
+    private var stopRequestedByUser = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -85,7 +97,10 @@ class RecordingService : Service() {
                     start(File(dir))
                 }
             }
-            ACTION_STOP -> stop()
+            ACTION_STOP -> {
+                stopRequestedByUser = true
+                stop()
+            }
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -106,6 +121,7 @@ class RecordingService : Service() {
         running = true
         isRecording = true
         elapsedMs = 0L
+        stopRequestedByUser = false
 
         worker = Thread({ recordLoop(outputDir) }, "aivoice-recorder").apply {
             priority = Thread.MAX_PRIORITY
@@ -130,6 +146,7 @@ class RecordingService : Service() {
         var recorder: AudioRecord? = null
         var codec: MediaCodec? = null
         var writer: ChunkWriter? = null
+        var failure: String? = null
 
         try {
             val minBuffer = AudioRecord.getMinBufferSize(
@@ -138,7 +155,8 @@ class RecordingService : Service() {
                 AudioFormat.ENCODING_PCM_16BIT,
             )
             if (minBuffer <= 0) {
-                listener?.onError("AudioRecord.getMinBufferSize failed: $minBuffer")
+                failure = "AudioRecord.getMinBufferSize failed: $minBuffer"
+                listener?.onError(failure)
                 return
             }
 
@@ -150,7 +168,8 @@ class RecordingService : Service() {
                 maxOf(minBuffer, READ_BYTES * 4),
             )
             if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                listener?.onError("AudioRecord is not initialized")
+                failure = "AudioRecord is not initialized"
+                listener?.onError(failure)
                 return
             }
 
@@ -179,7 +198,9 @@ class RecordingService : Service() {
             while (running) {
                 val read = recorder.read(pcm, 0, pcm.size)
                 if (read < 0) {
-                    listener?.onError("AudioRecord.read failed: $read")
+                    // 權限被中途撤回、或音訊裝置被搶走，都會走到這裡。
+                    failure = "AudioRecord.read failed: $read"
+                    listener?.onError(failure)
                     break
                 }
                 if (read == 0) continue
@@ -235,7 +256,8 @@ class RecordingService : Service() {
             writer.finish()
             writer = null
         } catch (e: Exception) {
-            listener?.onError(e.message ?: e.toString())
+            failure = e.message ?: e.toString()
+            listener?.onError(failure)
         } finally {
             try {
                 writer?.finish()
@@ -251,7 +273,16 @@ class RecordingService : Service() {
                 codec?.release()
             } catch (_: Exception) {
             }
+            // running 仍為 true 代表迴圈是被中斷的；服務被系統回收時
+            // 也會走到 stop()，但沒有經過 ACTION_STOP，同樣算中斷。
+            val interrupted = failure != null || running || !stopRequestedByUser
+            running = false
             isRecording = false
+            listener?.onStopped(interrupted, failure)
+            if (interrupted) {
+                // 被打斷時沒有人會呼叫 stop()，通知與 WakeLock 必須自己收掉。
+                Handler(Looper.getMainLooper()).post { stop() }
+            }
         }
     }
 

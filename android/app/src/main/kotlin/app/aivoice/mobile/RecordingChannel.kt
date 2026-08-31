@@ -206,6 +206,16 @@ class RecordingChannel(
         emit(mapOf("type" to "error", "message" to message))
     }
 
+    override fun onStopped(interrupted: Boolean, message: String?) {
+        emit(
+            mapOf(
+                "type" to "stopped",
+                "interrupted" to interrupted,
+                "message" to message,
+            ),
+        )
+    }
+
     private fun emit(payload: Map<String, Any?>) {
         main.post { events?.success(payload) }
     }
