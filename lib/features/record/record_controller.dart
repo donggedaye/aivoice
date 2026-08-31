@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../domain/entities/recording.dart';
+import '../../domain/entities/transcript.dart';
 
 /// 波形保留的取樣點數量。服務每 100 ms 送一次，約等於最近 12 秒。
 const int kWaveformLength = 120;
@@ -22,6 +23,8 @@ class RecordState {
     this.mergedBytes,
     this.error,
     this.permissionBlocked = false,
+    this.transcribing = false,
+    this.transcript,
   });
 
   final bool isRecording;
@@ -38,6 +41,11 @@ class RecordState {
   /// 使用者選了「不再詢問」，只能引導去系統設定。
   final bool permissionBlocked;
 
+  final bool transcribing;
+
+  /// 9/3 暫時顯示在錄音頁，9/5 搬到轉寫頁。
+  final Transcript? transcript;
+
   RecordState copyWith({
     bool? isRecording,
     bool? busy,
@@ -50,9 +58,12 @@ class RecordState {
     int? mergedBytes,
     String? error,
     bool? permissionBlocked,
+    bool? transcribing,
+    Transcript? transcript,
     bool clearError = false,
     bool clearSummary = false,
     bool clearMerged = false,
+    bool clearTranscript = false,
   }) {
     return RecordState(
       isRecording: isRecording ?? this.isRecording,
@@ -66,6 +77,8 @@ class RecordState {
       mergedBytes: clearMerged ? null : (mergedBytes ?? this.mergedBytes),
       error: clearError ? null : (error ?? this.error),
       permissionBlocked: permissionBlocked ?? this.permissionBlocked,
+      transcribing: transcribing ?? this.transcribing,
+      transcript: clearTranscript ? null : (transcript ?? this.transcript),
     );
   }
 }
@@ -124,6 +137,7 @@ class RecordController extends Notifier<RecordState> {
         current: recording,
         clearSummary: true,
         clearMerged: true,
+        clearTranscript: true,
       );
     } catch (e) {
       state = state.copyWith(busy: false, error: e.toString());
@@ -194,6 +208,23 @@ class RecordController extends Notifier<RecordState> {
       );
     } catch (e) {
       state = state.copyWith(busy: false, error: e.toString());
+    }
+  }
+
+  Future<void> transcribe() async {
+    final recording = state.current;
+    if (recording == null || state.transcribing || state.busy) return;
+
+    state = state.copyWith(
+      transcribing: true,
+      clearError: true,
+      clearTranscript: true,
+    );
+    try {
+      final transcript = await ref.read(transcribeLocallyProvider)(recording);
+      state = state.copyWith(transcribing: false, transcript: transcript);
+    } catch (e) {
+      state = state.copyWith(transcribing: false, error: e.toString());
     }
   }
 

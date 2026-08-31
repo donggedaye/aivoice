@@ -131,7 +131,19 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 - 配色：`lib/app/theme.dart`，两个色相（250 蓝 / 25 红）、冷中性调，由 oklch 换算成 sRGB，
   不用 `ColorScheme.fromSeed`。文字对比度全部过 WCAG AA，注释里记了实测值。
   暂时只有浅色主题，深色模式未做。
-- 下一项：真机跑完 20 分钟锁屏测试 → 打勾 9/2 → 9/3 sherpa-onnx。
+- 9/3 代码已完成，**未打勾**：完成标准写的是「真机转写 1 分钟音频」，我只在模拟器上验过。
+  已做：`AsrBridge`（AAC→PCM 解码、SHA-256、网络型态，全部走背景执行绪）、
+  模型下载（断点续传、失败可重试、SHA-256 不过就删掉重下）、首启动下载页（Wi-Fi 直下、
+  行动网络先提示、可选「稍后」不硬挡）、`TranscribeLocally`（sherpa_onnx OfflineRecognizer，
+  在独立 isolate 跑，避免冻住画面）。转写文字暂时显示在录音页，9/5 搬到转写页。
+  模型：SenseVoice-small int8，228 MB，只抓 model.int8.onnx + tokens.txt，
+  不下载官方那包 1.05 GB 的 tar.bz2。校验值是自己下载后算的 —— 
+  **Hugging Face 的 ETag 不是 SHA-256**（该 repo 走 Xet 储存），别再拿它当校验值。
+- 已知问题（9/4 要处理）：
+  - 每次转写都重新载入模型（约 228 MB），没有常驻。模拟器上 61 秒音频含载入耗时 31–41 秒，
+    要达到 9/4 的「10 分钟音频 60 秒内转完」必须改成常驻 recognizer。
+  - 输出仍是简体（SenseVoice 原始输出）。OpenCC s2twp 是 9/4 的事。
+- 下一项：真机验 9/2 的 20 分钟锁屏与 9/3 的 1 分钟转写 → 打勾 → 9/4 VAD 切段 + OpenCC。
 - 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter（+ dev: drift_dev / build_runner）。
   只写进 pubspec，未写代码、未跑 codegen。sherpa_onnx 留到 9/3，opencc 留到 9/4。
   `sqlite3_flutter_libs` 0.6.0+eol 是空包（sqlite3 3.x 改用 build hooks），已删直接依赖；

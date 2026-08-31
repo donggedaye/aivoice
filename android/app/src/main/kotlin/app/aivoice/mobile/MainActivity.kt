@@ -6,11 +6,16 @@ import io.flutter.embedding.engine.FlutterEngine
 class MainActivity : FlutterActivity() {
 
     private var recordingChannel: RecordingChannel? = null
+    private var asrBridge: AsrBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         recordingChannel = RecordingChannel(
             this,
+            flutterEngine.dartExecutor.binaryMessenger,
+        )
+        asrBridge = AsrBridge(
+            applicationContext,
             flutterEngine.dartExecutor.binaryMessenger,
         )
     }
@@ -32,6 +37,8 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         recordingChannel?.dispose()
         recordingChannel = null
+        asrBridge?.dispose()
+        asrBridge = null
         super.onDestroy()
     }
 }

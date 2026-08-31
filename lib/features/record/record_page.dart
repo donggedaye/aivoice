@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
 import '../../domain/entities/recording.dart';
+import '../../domain/entities/transcript.dart';
 import 'record_controller.dart';
 import 'widgets/waveform_view.dart';
 
@@ -61,6 +63,12 @@ class RecordPage extends ConsumerWidget {
                   mergedPath: state.mergedPath,
                   mergedBytes: state.mergedBytes,
                   onMerge: controller.merge,
+                ),
+                const SizedBox(height: 16),
+                _TranscriptCard(
+                  transcribing: state.transcribing,
+                  transcript: state.transcript,
+                  onTranscribe: controller.transcribe,
                 ),
               ],
             ],
@@ -182,6 +190,65 @@ class _SummaryCard extends StatelessWidget {
               Text(
                 '大小 ${_formatBytes(mergedBytes ?? 0)}',
                 style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 9/3 的暫時位置。9/5 有轉寫頁之後搬走。
+class _TranscriptCard extends ConsumerWidget {
+  const _TranscriptCard({
+    required this.transcribing,
+    required this.transcript,
+    required this.onTranscribe,
+  });
+
+  final bool transcribing;
+  final Transcript? transcript;
+  final VoidCallback onTranscribe;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ready = ref.watch(modelReadyProvider).value ?? false;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('轉寫', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            if (!ready)
+              Text(
+                '語音模型尚未下載完成，無法轉寫。',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else if (transcribing) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text(
+                '辨識中，第一次要先載入模型，會慢一些。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ] else
+              FilledButton.icon(
+                onPressed: onTranscribe,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.text_fields),
+                label: Text(transcript == null ? '開始轉寫' : '重新轉寫'),
+              ),
+            if (transcript != null) ...[
+              const SizedBox(height: 16),
+              SelectableText(
+                transcript!.text.isEmpty ? '（沒有辨識到語音）' : transcript!.text,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],
           ],
