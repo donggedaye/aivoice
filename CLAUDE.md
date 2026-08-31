@@ -72,6 +72,9 @@ android/app/src/main/kotlin/.../
 - minSdk 24 / targetSdk 36 / compileSdk 36
 - 不执行 `flutter upgrade`、不切 channel、不改 Gradle / AGP / NDK 版本
 - 构建失败先贴完整报错，由我决定是否动版本
+- 澄清：禁止的是主动修改 Flutter/Gradle/AGP/NDK 版本号来绕过构建失败；
+  工具链自动拉取的附属组件不在此列。
+  （例：构建时 AGP 自动装了 NDK 28.2.13676358 与 SDK Platform 35，保留；实际编译仍用 27.1）
 
 ## 数据契约（App 与后端共用一份 JSON Schema，改动必须同时改两边）
 ```
@@ -120,7 +123,8 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
 - 已完成 9/1：工程初始化、Git、`flutter analyze` 无错、`flutter build apk --debug` 产出 APK。
 - 下一项：9/2 录音（Kotlin 前台服务、30 秒分片、Opus/AAC、波形与计时）。
-- 已知问题：
-  - `sqlite3_flutter_libs` 0.6.0+eol 已是空包（sqlite3 3.x 改用 hooks 编译），直接依赖可删，暂留。
-  - 构建时 Gradle 自动装了 NDK r28c 与 SDK Platform 35（未经确认）；实际参与编译的仍是 27.1。
-  - `flutter doctor` 报 Android license status unknown，不影响构建。
+- 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter（+ dev: drift_dev / build_runner）。
+  只写进 pubspec，未写代码、未跑 codegen。sherpa_onnx 留到 9/3，opencc 留到 9/4。
+  `sqlite3_flutter_libs` 0.6.0+eol 是空包（sqlite3 3.x 改用 build hooks），已删直接依赖；
+  由 drift_flutter 作为传递依赖保留，`libsqlite3.so` 三个 ABI 仍正常打进 APK。
+- 已知问题：`flutter doctor` 报 Android license status unknown，不影响构建，忽略。
