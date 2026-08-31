@@ -5,7 +5,7 @@
 做完一项在前面打 [x]，并更新 CLAUDE.md 的"当前进度"。
 
 ## 第 1 周（9/1–9/7）录得下、转得出
-- [ ] 9/1 Flutter 工程初始化（按 CLAUDE.md 目录结构）、Git、`flutter build apk --debug` 本地跑通
+- [x] 9/1 Flutter 工程初始化（按 CLAUDE.md 目录结构）、Git、`flutter build apk --debug` 本地跑通
       完成标准：干净构建出 APK，能装到真机
 - [ ] 9/2 录音：Kotlin 前台服务、锁屏不断、每 30 秒分片落盘、Opus/AAC、录音页波形与计时
       完成标准：锁屏录 20 分钟不丢，分片可拼接

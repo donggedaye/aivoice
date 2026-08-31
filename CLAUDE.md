@@ -63,6 +63,16 @@ android/app/src/main/kotlin/.../
 - 所有异步任务（转写、分析）走本地持久化队列，可离线排队，联网后自动执行
 - 后端：Python FastAPI
 
+## 环境（9 月内不升级任何一项）
+- Flutter 3.47.2 (stable)，`/home/roo/Development/Server/flutter`；不在 PATH，命令前需 `export PATH=/home/roo/Development/Server/flutter/bin:$PATH`
+- Dart 3.13.2
+- JDK 17.0.20-tem（sdkman），已用 `flutter config --jdk-dir` 指定
+- Android SDK 36，NDK 27.1，CMake 3.22.1
+- 包名：Dart package `aivoice`；namespace = applicationId = `app.aivoice.mobile`
+- minSdk 24 / targetSdk 36 / compileSdk 36
+- 不执行 `flutter upgrade`、不切 channel、不改 Gradle / AGP / NDK 版本
+- 构建失败先贴完整报错，由我决定是否动版本
+
 ## 数据契约（App 与后端共用一份 JSON Schema，改动必须同时改两边）
 ```
 Claim {
@@ -108,4 +118,9 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 
 ## 当前进度
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
-- 未开始。下一项：PLAN.md 第 1 周 9/1。
+- 已完成 9/1：工程初始化、Git、`flutter analyze` 无错、`flutter build apk --debug` 产出 APK。
+- 下一项：9/2 录音（Kotlin 前台服务、30 秒分片、Opus/AAC、波形与计时）。
+- 已知问题：
+  - `sqlite3_flutter_libs` 0.6.0+eol 已是空包（sqlite3 3.x 改用 hooks 编译），直接依赖可删，暂留。
+  - 构建时 Gradle 自动装了 NDK r28c 与 SDK Platform 35（未经确认）；实际参与编译的仍是 27.1。
+  - `flutter doctor` 报 Android license status unknown，不影响构建。
