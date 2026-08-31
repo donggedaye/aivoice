@@ -128,6 +128,9 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
   录音页（计时、波形、分片数）、结束后从 ADTS 帧数实测总时长、一键把分片拼成 `full.aac`。
   音频参数：16 kHz 单声道 AAC-LC 32 kbps；分片档名 `chunk_%04d.aac`，位于
   `<filesDir>/recordings/<timestamp>/`。
+- 配色：`lib/app/theme.dart`，两个色相（250 蓝 / 25 红）、冷中性调，由 oklch 换算成 sRGB，
+  不用 `ColorScheme.fromSeed`。文字对比度全部过 WCAG AA，注释里记了实测值。
+  暂时只有浅色主题，深色模式未做。
 - 下一项：真机跑完 20 分钟锁屏测试 → 打勾 9/2 → 9/3 sherpa-onnx。
 - 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter（+ dev: drift_dev / build_runner）。
   只写进 pubspec，未写代码、未跑 codegen。sherpa_onnx 留到 9/3，opencc 留到 9/4。
