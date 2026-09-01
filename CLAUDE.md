@@ -124,31 +124,34 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 
 ## 当前进度
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
-- 已完成 9/1：工程初始化、Git、`flutter analyze` 无错、`flutter build apk --debug` 产出 APK。
-- 9/2 代码已完成，**未打勾**：完成标准「锁屏录 20 分钟不丢」必须真机实测，我验证不到。
-  已做：`RecordingService`（AudioRecord 全程不停、AAC-LC ADTS 裸流、每 30 秒轮替输出档、
-  前台服务 + PARTIAL_WAKE_LOCK）、`RecordingChannel`（权限、start/stop/state、amplitude/chunk 事件）、
-  录音页（计时、波形、分片数）、结束后从 ADTS 帧数实测总时长、一键把分片拼成 `full.aac`。
-  音频参数：16 kHz 单声道 AAC-LC 32 kbps；分片档名 `chunk_%04d.aac`，位于
-  `<filesDir>/recordings/<timestamp>/`。
-- 配色：`lib/app/theme.dart`，两个色相（250 蓝 / 25 红）、冷中性调，由 oklch 换算成 sRGB，
-  不用 `ColorScheme.fromSeed`。文字对比度全部过 WCAG AA，注释里记了实测值。
-  暂时只有浅色主题，深色模式未做。
-- 9/3 代码已完成，**未打勾**：完成标准写的是「真机转写 1 分钟音频」，我只在模拟器上验过。
-  已做：`AsrBridge`（AAC→PCM 解码、SHA-256、网络型态，全部走背景执行绪）、
-  模型下载（断点续传、失败可重试、SHA-256 不过就删掉重下）、首启动下载页（Wi-Fi 直下、
-  行动网络先提示、可选「稍后」不硬挡）、`TranscribeLocally`（sherpa_onnx OfflineRecognizer，
-  在独立 isolate 跑，避免冻住画面）。转写文字暂时显示在录音页，9/5 搬到转写页。
-  模型：SenseVoice-small int8，228 MB，只抓 model.int8.onnx + tokens.txt，
-  不下载官方那包 1.05 GB 的 tar.bz2。校验值是自己下载后算的 —— 
+- 已完成 9/1–9/4。9/2、9/3 由我真机验过；9/4 的数字是模拟器（x86_64）测的。
+- 9/4 实测：10 分 01 秒音频，冷启动（行程新开、模型未载入）34 秒转完，
+  热的 32 秒；切出 108 段，与测试音档重复次数完全一致；输出台湾正体。
+- 转写管线：
+  `chunk_*.aac` →（暂存合并）→ `AsrBridge` 解码成 16 kHz PCM →
+  常驻 isolate（`AsrWorker`：OfflineRecognizer + silero-vad 只载入一次）→
+  VAD 切段、逐段辨识、带 start/end 时间戳 → OpenCC s2twp → `Transcript`
+  中间产物 `transcode.aac` / `transcode.pcm` 在 finally 里删掉，失败也清。
+- OpenCC 是自己实作的（`lib/core/utils/opencc.dart`）：pub.dev 上 `opencc` 依赖已被
+  取代的 native_assets_cli、`flutter_opencc` 停在 Dart 2，两个都不能用。
+  字典用官方 OpenCC 原始 .txt 放 `assets/opencc/`（约 1.1 MB，Apache-2.0，附 LICENSE）。
+  转换链照 `s2twp.json`：STPhrases 短路 STCharacters，再 TWPhrases ∪ TWVariantsPhrases ∪ TWVariants。
+  有 8 条单元测试钉住行为（`test/opencc_test.dart`）。
+- 模型：SenseVoice-small int8 228 MB + tokens.txt + silero_vad.onnx 643 KB，合计 229 MB。
+  只抓单档，不下载官方那包 1.05 GB 的 tar.bz2。校验值是自己下载后算的 ——
   **Hugging Face 的 ETag 不是 SHA-256**（该 repo 走 Xet 储存），别再拿它当校验值。
-- 已知问题（9/4 要处理）：
-  - 每次转写都重新载入模型（约 228 MB），没有常驻。模拟器上 61 秒音频含载入耗时 31–41 秒，
-    要达到 9/4 的「10 分钟音频 60 秒内转完」必须改成常驻 recognizer。
-  - 输出仍是简体（SenseVoice 原始输出）。OpenCC s2twp 是 9/4 的事。
-- 下一项：真机验 9/2 的 20 分钟锁屏与 9/3 的 1 分钟转写 → 打勾 → 9/4 VAD 切段 + OpenCC。
-- 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter（+ dev: drift_dev / build_runner）。
-  只写进 pubspec，未写代码、未跑 codegen。sherpa_onnx 留到 9/3，opencc 留到 9/4。
-  `sqlite3_flutter_libs` 0.6.0+eol 是空包（sqlite3 3.x 改用 build hooks），已删直接依赖；
-  由 drift_flutter 作为传递依赖保留，`libsqlite3.so` 三个 ABI 仍正常打进 APK。
-- 已知问题：`flutter doctor` 报 Android license status unknown，不影响构建，忽略。
+- 隐私：`allowBackup=false` + `data_extraction_rules.xml`（cloud-backup 与 device-transfer
+  都排除全部 domain）。录音不自动删除，只有用户主动删除才消失。
+- 已知问题：
+  - OpenCC s2twp 会把 台 转成 臺（台灣→臺灣）。这是上游 OpenCC 的行为，不是 bug，
+    但台湾用户日常写「台灣」。要不要加例外是产品决定，未决。
+  - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
+    这是辨识准确度问题，9/7 归类转写错误时一并记录。
+  - `AsrWorker` 常驻会一直占着模型的记忆体（约 300–400 MB），低阶机在背景可能被系统回收。
+    目前没有闲置释放机制。
+  - 9/4 的效能数字来自模拟器，真机是 arm64，快慢未知。
+  - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
+- 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter / sherpa_onnx
+  （+ dev: drift_dev / build_runner）。drift 只写进 pubspec，未写代码、未跑 codegen。
+  go_router 已列入但延后到 9/5 有第二页时才接。
+- 下一项：9/5 转写页（段落列表、点段落回放对应音频），顺便把转写显示从录音页搬走。

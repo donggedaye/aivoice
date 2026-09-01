@@ -246,10 +246,41 @@ class _TranscriptCard extends ConsumerWidget {
               ),
             if (transcript != null) ...[
               const SizedBox(height: 16),
-              SelectableText(
-                transcript!.text.isEmpty ? '（沒有辨識到語音）' : transcript!.text,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+              if (transcript!.segments.isEmpty)
+                Text(
+                  '（沒有辨識到語音）',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                )
+              else ...[
+                Text(
+                  '${transcript!.segments.length} 段',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                for (final segment in transcript!.segments)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_formatDuration(Duration(milliseconds: segment.startMs))}'
+                          ' – '
+                          '${_formatDuration(Duration(milliseconds: segment.endMs))}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                        ),
+                        SelectableText(
+                          segment.text,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
           ],
         ),

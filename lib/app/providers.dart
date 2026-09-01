@@ -5,6 +5,7 @@ import '../core/network/model_downloader.dart';
 import '../core/platform/asr_channel.dart';
 import '../core/platform/recording_channel.dart';
 import '../core/storage/model_manager.dart';
+import '../data/local/asr_worker.dart';
 import '../data/repositories_impl/recording_repository_impl.dart';
 import '../data/repositories_impl/transcription_repository_impl.dart';
 import '../domain/repositories/recording_repository.dart';
@@ -48,11 +49,19 @@ final recordingRepositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepositoryImpl(ref.watch(recordingChannelProvider)),
 );
 
+/// 常駐辨識 isolate。模型只載入一次，App 關閉時才釋放。
+final asrWorkerProvider = Provider<AsrWorker>((ref) {
+  final worker = AsrWorker();
+  ref.onDispose(worker.dispose);
+  return worker;
+});
+
 final transcriptionRepositoryProvider = Provider<TranscriptionRepository>(
   (ref) => TranscriptionRepositoryImpl(
     ref.watch(asrChannelProvider),
     ref.watch(modelManagerProvider),
     ref.watch(recordingRepositoryProvider),
+    ref.watch(asrWorkerProvider),
   ),
 );
 

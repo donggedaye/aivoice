@@ -38,7 +38,20 @@ const List<ModelFile> kSenseVoiceFiles = [
     sha256: 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc',
     bytes: 315894,
   ),
+  // silero-vad，切段用。相對 228 MB 幾乎不佔額外時間。
+  ModelFile(
+    name: 'silero_vad.onnx',
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
+        'asr-models/silero_vad.onnx',
+    sha256: '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6',
+    bytes: 643854,
+  ),
 ];
+
+/// 三個模型檔在 [kSenseVoiceFiles] 裡的位置。
+const int kModelIndex = 0;
+const int kTokensIndex = 1;
+const int kVadIndex = 2;
 
 int get kSenseVoiceTotalBytes =>
     kSenseVoiceFiles.fold<int>(0, (sum, file) => sum + file.bytes);
