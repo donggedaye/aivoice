@@ -135,25 +135,29 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 - OpenCC 是自己实作的（`lib/core/utils/opencc.dart`）：pub.dev 上 `opencc` 依赖已被
   取代的 native_assets_cli、`flutter_opencc` 停在 Dart 2，两个都不能用。
   字典用官方 OpenCC 原始 .txt 放 `assets/opencc/`（约 1.1 MB，Apache-2.0，附 LICENSE）。
-  转换链照 `s2twp.json`：STPhrases 短路 STCharacters，再 TWPhrases ∪ TWVariantsPhrases ∪ TWVariants。
-  有 8 条单元测试钉住行为（`test/opencc_test.dart`）。
+  转换链照 `s2twp.json`：STPhrases 短路 STCharacters，再 TWPhrases ∪ TWVariantsPhrases ∪ TWVariants，
+  最后加一段我们自己维护的「台湾日常用字覆写」把 臺 收回 台（见下）。
+  有单元测试钉住行为（`test/opencc_test.dart`）。
 - 模型：SenseVoice-small int8 228 MB + tokens.txt + silero_vad.onnx 643 KB，合计 229 MB。
   只抓单档，不下载官方那包 1.05 GB 的 tar.bz2。校验值是自己下载后算的 ——
   **Hugging Face 的 ETag 不是 SHA-256**（该 repo 走 Xet 储存），别再拿它当校验值。
 - 隐私：`allowBackup=false` + `data_extraction_rules.xml`（cloud-backup 与 device-transfer
   都排除全部 domain）。录音不自动删除，只有用户主动删除才消失。
 - 已知问题：
-  - OpenCC s2twp 会把 台 转成 臺（台灣→臺灣）。这是上游 OpenCC 的行为，不是 bug，
-    但台湾用户日常写「台灣」。要不要加例外是产品决定，未决。
   - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
     这是辨识准确度问题，9/7 归类转写错误时一并记录。
-  - `AsrWorker` 常驻会一直占着模型的记忆体（约 300–400 MB），低阶机在背景可能被系统回收。
-    目前没有闲置释放机制。（PCM 已改成边读边喂，不再整档载入。）
   - 9/4 的效能数字来自模拟器，真机是 arm64，快慢未知。
   - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 - 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter / sherpa_onnx
   （+ dev: drift_dev / build_runner）。drift 只写进 pubspec，未写代码、未跑 codegen。
   go_router 已列入但延后到 9/5 有第二页时才接。
+- 台湾日常用字：上游 OpenCC 依教育部标准把 台 对到 臺（臺灣／臺北／平臺），
+  但台湾人日常一律写「台」，转写稿是要给用户读、还要当证据引用原话的。
+  所以在转换链最后加一段自己维护的覆写把 臺 收回 台（`_taiwanEveryday`，目前只有一条）。
+  代价：兄臺、亭臺樓閣 这类文言用法也会被改掉，会议录音里几乎不会出现。
+- 记忆体：`AsrWorker` 闲置 5 分钟就把模型放掉（送 stop 让 worker 自己 free 原生记忆体）。
+  实测：转写前 PSS 249 MB → 转写后 631 MB → 闲置满 5 分钟准时掉到 351 MB。
+  释放后再转写会重新载入，10 分钟音频 35 秒（常驻时 34 秒），差 1 秒。
 - code review 修过的：worker 启动失败会永久卡死（已改成明确报错，有回归测试）、
   `dispose()` 先 kill 导致原生记忆体不释放、isolate 崩溃后 ReceivePort 泄漏、
   `_commands!` 竞态、OpenCC 字典解析阻塞主 isolate（已搬进 `Isolate.run`）、

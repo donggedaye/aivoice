@@ -56,8 +56,8 @@ class OpenCC {
       );
 
       return _cached = OpenCC._([
-        for (final stage in parsed)
-          _Dictionary(stage.$1, stage.$2),
+        for (final stage in parsed) _Dictionary(stage.$1, stage.$2),
+        _Dictionary(_taiwanEveryday, 1),
       ]);
     } catch (_) {
       _loading = null;
@@ -73,6 +73,16 @@ class OpenCC {
     return text;
   }
 }
+
+/// 台灣日常用字覆寫。**這份是我們自己維護的，不是 OpenCC 的資料。**
+///
+/// OpenCC 的 s2twp 依教育部標準用字把 台 對到 臺，所以會產出 臺灣、臺北、平臺。
+/// 但台灣人日常書寫幾乎一律寫「台」。轉寫稿是要給使用者讀、之後還要當證據
+/// 引用原話的，讀起來必須像人寫的，所以最後再過一遍把 臺 收回 台。
+///
+/// 代價是 兄臺、亭臺樓閣 這類文言用法也會被改掉。會議錄音裡出現的機率極低，
+/// 而 台北／台中／平台／電台 天天都會出現，這個取捨划算。
+const Map<String, String> _taiwanEveryday = {'臺': '台'};
 
 /// 只收字串，不讓閉包碰到其他東西 —— 直接在 `_load` 裡寫 `Isolate.run`，
 /// 閉包會連同一個 scope 的 AssetBundle 一起被捕捉，而 bundle 內部有 Future，

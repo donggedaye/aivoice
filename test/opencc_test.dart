@@ -47,11 +47,14 @@ void main() {
     expect(converter.convert(''), '');
   });
 
-  // 上游 OpenCC 的 s2twp 就是這樣：STCharacters 把 台 對到 臺（教育部標準用字），
-  // 所以 台灣 會變成 臺灣。這裡把行為釘住，改不改是產品決定，不是 bug。
-  test('OpenCC maps 台 to 臺, matching upstream s2twp', () {
-    expect(converter.convert('台湾'), '臺灣');
-    expect(converter.convert('台灣'), '臺灣');
+  // 上游 OpenCC 依教育部標準把 台 對到 臺，我們在最後一段收回來，
+  // 因為台灣人日常就是寫「台」。
+  test('台 stays 台, overriding upstream s2twp', () {
+    expect(converter.convert('台湾'), '台灣');
+    expect(converter.convert('台灣'), '台灣');
+    expect(converter.convert('台北'), '台北');
+    expect(converter.convert('平台'), '平台');
+    expect(converter.convert('电台'), '電台');
   });
 
   test('a real sentence converts end to end', () {

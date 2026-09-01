@@ -18,6 +18,11 @@ const double _maxSpeechSeconds = 15.0;
 /// PCM 加上轉出來的 float 是 6 bytes/取樣，一小時就要 345 MB。
 const int _readSamples = _sampleRate;
 
+/// 閒置多久就把模型放掉。常駐的代價是約 300–400 MB 原生記憶體，一直佔著會讓
+/// 低階機在背景被系統回收整個 App。重新載入在模擬器上只差 2 秒（34 vs 32），
+/// 用這點時間換掉一直吃記憶體很划算。
+const Duration _idleTimeout = Duration(minutes: 5);
+
 class RawSegment {
   const RawSegment({
     required this.startMs,
@@ -44,6 +49,7 @@ class AsrWorker {
 
   final Map<int, Completer<List<RawSegment>>> _pending = {};
   int _nextJobId = 0;
+  Timer? _idle;
 
   Future<List<RawSegment>> transcribe({
     required String modelPath,
@@ -51,6 +57,9 @@ class AsrWorker {
     required String vadPath,
     required String pcmPath,
   }) async {
+    _idle?.cancel();
+    _idle = null;
+
     await _ensureStarted(
       modelPath: modelPath,
       tokensPath: tokensPath,
@@ -125,6 +134,7 @@ class AsrWorker {
       final error = message['error'] as String?;
       if (error != null) {
         completer.completeError(StateError(error));
+        _scheduleIdleRelease();
         return;
       }
       final raw = (message['segments'] as List).cast<Map>();
@@ -136,6 +146,7 @@ class AsrWorker {
             text: segment['text'] as String,
           ),
       ]);
+      _scheduleIdleRelease();
       return;
     }
 
@@ -165,17 +176,20 @@ class AsrWorker {
     _teardown();
   }
 
-  void _teardown() {
-    _responses?.close();
-    _responses = null;
-    _isolate?.kill(priority: Isolate.immediate);
-    _isolate = null;
-    _commands = null;
-    _starting = null;
-    _ready = null;
+  /// 沒有任務在跑就開始倒數，時間到把模型放掉。
+  void _scheduleIdleRelease() {
+    _idle?.cancel();
+    _idle = null;
+    if (_pending.isNotEmpty || _commands == null) return;
+    _idle = Timer(_idleTimeout, () {
+      _idle = null;
+      if (_pending.isEmpty) _shutdown();
+    });
   }
 
-  void dispose() {
+  /// 有禮貌地收掉 worker：先讓它 free 掉原生記憶體再結束。
+  /// 收完之後這個物件還能用，下一次 `transcribe()` 會重新啟動一個。
+  void _shutdown() {
     final commands = _commands;
     final isolate = _isolate;
 
@@ -189,18 +203,35 @@ class AsrWorker {
     _starting = null;
     _ready = null;
     _isolate = null;
-    _pending.clear();
 
-    if (isolate != null) {
-      if (commands == null) {
+    if (isolate == null) return;
+    if (commands == null) {
+      isolate.kill(priority: Isolate.immediate);
+    } else {
+      // 正常情況 worker 自己關掉 port 就結束了；卡住才強制收掉。
+      Timer(const Duration(seconds: 5), () {
         isolate.kill(priority: Isolate.immediate);
-      } else {
-        // 正常情況 worker 自己關掉 port 就結束了；卡住才強制收掉。
-        Timer(const Duration(seconds: 5), () {
-          isolate.kill(priority: Isolate.immediate);
-        });
-      }
+      });
     }
+  }
+
+  void _teardown() {
+    _idle?.cancel();
+    _idle = null;
+    _responses?.close();
+    _responses = null;
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+    _commands = null;
+    _starting = null;
+    _ready = null;
+  }
+
+  void dispose() {
+    _idle?.cancel();
+    _idle = null;
+    _shutdown();
+    _pending.clear();
   }
 }
 
