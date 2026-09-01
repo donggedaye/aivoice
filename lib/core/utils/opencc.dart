@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 /// OpenCC `s2twp`：簡體 → 台灣正體，含台灣用詞替換。
@@ -19,27 +21,48 @@ class OpenCC {
   final List<_Dictionary> _stages;
 
   static OpenCC? _cached;
+  static Future<OpenCC>? _loading;
 
-  /// 載入一次就快取。三個字典合計約 1.1 MB，只有第一次會花時間。
-  static Future<OpenCC> s2twp({AssetBundle? bundle}) async {
+  /// 載入一次就快取。字典合計約 1.1 MB。
+  ///
+  /// 解析（切行 + 五萬多次 map 寫入）是同步的，放在主 isolate 會凍住畫面幾百毫秒，
+  /// 所以丟到 `Isolate.run`。整條 ASR 管線特地搬離主 isolate，這裡不能又搬回來。
+  static Future<OpenCC> s2twp({AssetBundle? bundle}) {
     final cached = _cached;
-    if (cached != null) return cached;
+    if (cached != null) return Future.value(cached);
+    return _loading ??= _load(bundle ?? rootBundle);
+  }
 
-    final assets = bundle ?? rootBundle;
+  static Future<OpenCC> _load(AssetBundle assets) async {
+    try {
+      Future<String> read(String name) =>
+          assets.loadString('assets/opencc/$name');
 
-    final normalize = _Dictionary();
-    await normalize.load(assets, 'assets/opencc/CJK_Compatibility_Ideographs.txt');
+      final normalize = [await read('CJK_Compatibility_Ideographs.txt')];
+      final toTraditional = [
+        await read('STPhrases.txt'),
+        await read('STCharacters.txt'),
+      ];
+      final toTaiwan = [
+        await read('TWPhrases.txt'),
+        await read('TWVariantsPhrases.txt'),
+        await read('TWVariants.txt'),
+      ];
 
-    final toTraditional = _Dictionary();
-    await toTraditional.load(assets, 'assets/opencc/STPhrases.txt');
-    await toTraditional.load(assets, 'assets/opencc/STCharacters.txt');
+      final parsed = await _parseOffMainIsolate(
+        normalize,
+        toTraditional,
+        toTaiwan,
+      );
 
-    final toTaiwan = _Dictionary();
-    await toTaiwan.load(assets, 'assets/opencc/TWPhrases.txt');
-    await toTaiwan.load(assets, 'assets/opencc/TWVariantsPhrases.txt');
-    await toTaiwan.load(assets, 'assets/opencc/TWVariants.txt');
-
-    return _cached = OpenCC._([normalize, toTraditional, toTaiwan]);
+      return _cached = OpenCC._([
+        for (final stage in parsed)
+          _Dictionary(stage.$1, stage.$2),
+      ]);
+    } catch (_) {
+      _loading = null;
+      rethrow;
+    }
   }
 
   String convert(String input) {
@@ -51,12 +74,29 @@ class OpenCC {
   }
 }
 
-class _Dictionary {
-  final Map<String, String> _entries = {};
-  int _longestKey = 0;
+/// 只收字串，不讓閉包碰到其他東西 —— 直接在 `_load` 裡寫 `Isolate.run`，
+/// 閉包會連同一個 scope 的 AssetBundle 一起被捕捉，而 bundle 內部有 Future，
+/// 無法跨 isolate 傳送。
+Future<List<(Map<String, String>, int)>> _parseOffMainIsolate(
+  List<String> normalize,
+  List<String> toTraditional,
+  List<String> toTaiwan,
+) {
+  return Isolate.run(
+    () => [
+      _parse(normalize),
+      _parse(toTraditional),
+      _parse(toTaiwan),
+    ],
+  );
+}
 
-  Future<void> load(AssetBundle bundle, String path) async {
-    final content = await bundle.loadString(path);
+/// 依序合併多份字典。先載入的優先，等同 OpenCC 的 short_circuit。
+(Map<String, String>, int) _parse(List<String> contents) {
+  final entries = <String, String>{};
+  var longestKey = 0;
+
+  for (final content in contents) {
     for (final line in content.split('\n')) {
       if (line.isEmpty || line.startsWith('#')) continue;
       final tab = line.indexOf('\t');
@@ -69,12 +109,20 @@ class _Dictionary {
       if (space >= 0) value = value.substring(0, space);
       if (value.isEmpty) continue;
 
-      // 先載入的字典優先，等同 short_circuit。
-      if (_entries.containsKey(key)) continue;
-      _entries[key] = value;
-      if (key.length > _longestKey) _longestKey = key.length;
+      if (entries.containsKey(key)) continue;
+      entries[key] = value;
+      if (key.length > longestKey) longestKey = key.length;
     }
   }
+
+  return (entries, longestKey);
+}
+
+class _Dictionary {
+  _Dictionary(this._entries, this._longestKey);
+
+  final Map<String, String> _entries;
+  final int _longestKey;
 
   /// 前向最長匹配。
   String apply(String input) {

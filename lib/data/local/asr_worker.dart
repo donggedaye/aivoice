@@ -14,6 +14,10 @@ const int _vadWindow = 512;
 /// 也會讓 9/5 的「點段落回放」定位變粗。
 const double _maxSpeechSeconds = 15.0;
 
+/// 每次從 PCM 檔讀 1 秒。整檔載入會在長錄音上炸掉記憶體：
+/// PCM 加上轉出來的 float 是 6 bytes/取樣，一小時就要 345 MB。
+const int _readSamples = _sampleRate;
+
 class RawSegment {
   const RawSegment({
     required this.startMs,
@@ -36,6 +40,7 @@ class AsrWorker {
   SendPort? _commands;
   ReceivePort? _responses;
   Future<void>? _starting;
+  Completer<SendPort>? _ready;
 
   final Map<int, Completer<List<RawSegment>>> _pending = {};
   int _nextJobId = 0;
@@ -52,10 +57,16 @@ class AsrWorker {
       vadPath: vadPath,
     );
 
+    // isolate 可能在我們 await 期間就死了，不能直接 `_commands!`。
+    final commands = _commands;
+    if (commands == null) {
+      throw StateError('辨識 isolate 尚未就緒');
+    }
+
     final id = _nextJobId++;
     final completer = Completer<List<RawSegment>>();
     _pending[id] = completer;
-    _commands!.send({'type': 'transcribe', 'id': id, 'pcm': pcmPath});
+    commands.send({'type': 'transcribe', 'id': id, 'pcm': pcmPath});
     return completer.future;
   }
 
@@ -81,7 +92,8 @@ class AsrWorker {
     _responses = responses;
 
     final ready = Completer<SendPort>();
-    responses.listen((message) => _onMessage(message, ready));
+    _ready = ready;
+    responses.listen(_onMessage);
 
     try {
       _isolate = await Isolate.spawn(
@@ -93,16 +105,15 @@ class AsrWorker {
       );
       _commands = await ready.future;
     } catch (e) {
-      _starting = null;
-      responses.close();
-      _responses = null;
+      _teardown();
       rethrow;
     }
   }
 
-  void _onMessage(Object? message, Completer<SendPort> ready) {
+  void _onMessage(Object? message) {
     if (message is SendPort) {
-      if (!ready.isCompleted) ready.complete(message);
+      final ready = _ready;
+      if (ready != null && !ready.isCompleted) ready.complete(message);
       return;
     }
 
@@ -128,28 +139,68 @@ class AsrWorker {
       return;
     }
 
-    // isolate 掛掉（onError 送 List，onExit 送 null），把等待中的請求全部收掉。
-    _failAll(message is List ? '${message.first}' : '辨識 isolate 結束了');
+    // isolate 掛了：onError 送 List（錯誤訊息 + 堆疊），onExit 送 null。
+    _failAll(message is List && message.isNotEmpty
+        ? '${message.first}'
+        : '辨識 isolate 結束了');
   }
 
+  /// 讓所有等待中的呼叫拿到錯誤，並且把死掉的 isolate 徹底收乾淨。
+  ///
+  /// 包含還沒完成的 [_ready] —— 模型檔壞掉時 recognizer 或 VAD 會在 worker 啟動
+  /// 階段就拋例外，那時 SendPort 根本還沒送出來，漏掉它會讓 `transcribe()` 永遠
+  /// 卡在 await，UI 停在「辨識中」而且沒有任何錯誤訊息。
   void _failAll(String reason) {
+    final error = StateError(reason);
+
+    final ready = _ready;
+    if (ready != null && !ready.isCompleted) ready.completeError(error);
+
+    final pending = List.of(_pending.values);
+    _pending.clear();
+    for (final completer in pending) {
+      if (!completer.isCompleted) completer.completeError(error);
+    }
+
+    _teardown();
+  }
+
+  void _teardown() {
+    _responses?.close();
+    _responses = null;
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
     _commands = null;
     _starting = null;
-    for (final completer in _pending.values) {
-      if (!completer.isCompleted) completer.completeError(StateError(reason));
-    }
-    _pending.clear();
+    _ready = null;
   }
 
   void dispose() {
-    _commands?.send({'type': 'stop'});
+    final commands = _commands;
+    final isolate = _isolate;
+
+    // worker 收到 stop 才會呼叫 free()。sherpa-onnx 的原生記憶體是掛在整個
+    // 行程上的，isolate 被殺掉並不會還回去，所以不能直接 kill。
+    commands?.send({'type': 'stop'});
+
     _responses?.close();
     _responses = null;
     _commands = null;
     _starting = null;
-    _isolate?.kill(priority: Isolate.beforeNextEvent);
+    _ready = null;
     _isolate = null;
     _pending.clear();
+
+    if (isolate != null) {
+      if (commands == null) {
+        isolate.kill(priority: Isolate.immediate);
+      } else {
+        // 正常情況 worker 自己關掉 port 就結束了；卡住才強制收掉。
+        Timer(const Duration(seconds: 5), () {
+          isolate.kill(priority: Isolate.immediate);
+        });
+      }
+    }
   }
 }
 
@@ -217,25 +268,45 @@ void _asrWorkerMain(List<Object> init) {
 }
 
 /// VAD 切段，逐段送進辨識器。靜音不會進辨識，這是能達到 10 倍速的主因。
+///
+/// PCM 邊讀邊餵，不整檔載入 —— 20 分鐘的錄音光是 float 陣列就 76 MB，
+/// 再疊上常駐的模型，中階機會直接 OOM。
 List<Map<String, Object>> _splitAndRecognize(
   sherpa.OfflineRecognizer recognizer,
   sherpa.VoiceActivityDetector vad,
   String pcmPath,
 ) {
-  final samples = _readSamples(File(pcmPath));
   final segments = <Map<String, Object>>[];
+  final file = File(pcmPath).openSync();
 
   vad.reset();
-  var offset = 0;
-  while (offset + _vadWindow <= samples.length) {
-    vad.acceptWaveform(
-      Float32List.sublistView(samples, offset, offset + _vadWindow),
-    );
-    offset += _vadWindow;
+  try {
+    final buffer = Uint8List(_readSamples * 2);
+    final window = Float32List(_vadWindow);
+    var filled = 0;
+
+    while (true) {
+      final read = file.readIntoSync(buffer);
+      if (read <= 0) break;
+
+      final view = ByteData.sublistView(buffer, 0, read);
+      final count = read ~/ 2;
+      for (var i = 0; i < count; i++) {
+        window[filled++] = view.getInt16(i * 2, Endian.little) / 32768.0;
+        if (filled == _vadWindow) {
+          // acceptWaveform 會把取樣複製到原生記憶體，緩衝區可以重複使用。
+          vad.acceptWaveform(window);
+          filled = 0;
+          _drain(recognizer, vad, segments);
+        }
+      }
+    }
+
+    vad.flush();
     _drain(recognizer, vad, segments);
+  } finally {
+    file.closeSync();
   }
-  vad.flush();
-  _drain(recognizer, vad, segments);
 
   return segments;
 }
@@ -269,15 +340,4 @@ void _drain(
     }
     vad.pop();
   }
-}
-
-Float32List _readSamples(File file) {
-  final bytes = file.readAsBytesSync();
-  final view = ByteData.sublistView(bytes);
-  final count = bytes.length ~/ 2;
-  final samples = Float32List(count);
-  for (var i = 0; i < count; i++) {
-    samples[i] = view.getInt16(i * 2, Endian.little) / 32768.0;
-  }
-  return samples;
 }

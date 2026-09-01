@@ -148,10 +148,14 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
   - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
     这是辨识准确度问题，9/7 归类转写错误时一并记录。
   - `AsrWorker` 常驻会一直占着模型的记忆体（约 300–400 MB），低阶机在背景可能被系统回收。
-    目前没有闲置释放机制。
+    目前没有闲置释放机制。（PCM 已改成边读边喂，不再整档载入。）
   - 9/4 的效能数字来自模拟器，真机是 arm64，快慢未知。
   - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 - 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter / sherpa_onnx
   （+ dev: drift_dev / build_runner）。drift 只写进 pubspec，未写代码、未跑 codegen。
   go_router 已列入但延后到 9/5 有第二页时才接。
+- code review 修过的：worker 启动失败会永久卡死（已改成明确报错，有回归测试）、
+  `dispose()` 先 kill 导致原生记忆体不释放、isolate 崩溃后 ReceivePort 泄漏、
+  `_commands!` 竞态、OpenCC 字典解析阻塞主 isolate（已搬进 `Isolate.run`）、
+  PCM 整档载入（已改成串流读取，20 分钟录音不再吃 115 MB）。
 - 下一项：9/5 转写页（段落列表、点段落回放对应音频），顺便把转写显示从录音页搬走。
