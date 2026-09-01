@@ -124,42 +124,92 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 
 ## 当前进度
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
-- 已完成 9/1–9/4。9/2、9/3 由我真机验过；9/4 的数字是模拟器（x86_64）测的。
-- 9/4 实测：10 分 01 秒音频，冷启动（行程新开、模型未载入）34 秒转完，
-  热的 32 秒；切出 108 段，与测试音档重复次数完全一致；输出台湾正体。
-- 转写管线：
-  `chunk_*.aac` →（暂存合并）→ `AsrBridge` 解码成 16 kHz PCM →
-  常驻 isolate（`AsrWorker`：OfflineRecognizer + silero-vad 只载入一次）→
-  VAD 切段、逐段辨识、带 start/end 时间戳 → OpenCC s2twp → `Transcript`
-  中间产物 `transcode.aac` / `transcode.pcm` 在 finally 里删掉，失败也清。
-- OpenCC 是自己实作的（`lib/core/utils/opencc.dart`）：pub.dev 上 `opencc` 依赖已被
-  取代的 native_assets_cli、`flutter_opencc` 停在 Dart 2，两个都不能用。
-  字典用官方 OpenCC 原始 .txt 放 `assets/opencc/`（约 1.1 MB，Apache-2.0，附 LICENSE）。
-  转换链照 `s2twp.json`：STPhrases 短路 STCharacters，再 TWPhrases ∪ TWVariantsPhrases ∪ TWVariants，
-  最后加一段我们自己维护的「台湾日常用字覆写」把 臺 收回 台（见下）。
-  有单元测试钉住行为（`test/opencc_test.dart`）。
-- 模型：SenseVoice-small int8 228 MB + tokens.txt + silero_vad.onnx 643 KB，合计 229 MB。
-  只抓单档，不下载官方那包 1.05 GB 的 tar.bz2。校验值是自己下载后算的 ——
-  **Hugging Face 的 ETag 不是 SHA-256**（该 repo 走 Xet 储存），别再拿它当校验值。
-- 隐私：`allowBackup=false` + `data_extraction_rules.xml`（cloud-backup 与 device-transfer
-  都排除全部 domain）。录音不自动删除，只有用户主动删除才消失。
-- 已知问题：
-  - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
-    这是辨识准确度问题，9/7 归类转写错误时一并记录。
-  - 9/4 的效能数字来自模拟器，真机是 arm64，快慢未知。
-  - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
-- 依赖现状：flutter_riverpod / go_router / dio / drift / drift_flutter / sherpa_onnx
-  （+ dev: drift_dev / build_runner）。drift 只写进 pubspec，未写代码、未跑 codegen。
-  go_router 已列入但延后到 9/5 有第二页时才接。
-- 台湾日常用字：上游 OpenCC 依教育部标准把 台 对到 臺（臺灣／臺北／平臺），
-  但台湾人日常一律写「台」，转写稿是要给用户读、还要当证据引用原话的。
-  所以在转换链最后加一段自己维护的覆写把 臺 收回 台（`_taiwanEveryday`，目前只有一条）。
-  代价：兄臺、亭臺樓閣 这类文言用法也会被改掉，会议录音里几乎不会出现。
-- 记忆体：`AsrWorker` 闲置 5 分钟就把模型放掉（送 stop 让 worker 自己 free 原生记忆体）。
-  实测：转写前 PSS 249 MB → 转写后 631 MB → 闲置满 5 分钟准时掉到 351 MB。
-  释放后再转写会重新载入，10 分钟音频 35 秒（常驻时 34 秒），差 1 秒。
-- code review 修过的：worker 启动失败会永久卡死（已改成明确报错，有回归测试）、
-  `dispose()` 先 kill 导致原生记忆体不释放、isolate 崩溃后 ReceivePort 泄漏、
-  `_commands!` 竞态、OpenCC 字典解析阻塞主 isolate（已搬进 `Isolate.run`）、
-  PCM 整档载入（已改成串流读取，20 分钟录音不再吃 115 MB）。
-- 下一项：9/5 转写页（段落列表、点段落回放对应音频），顺便把转写显示从录音页搬走。
+
+### 状态
+- PLAN.md 第 1 周：9/1–9/4 已打勾，**下一项是 9/5 转写页**。
+- 9/2、9/3 由本人真机验过；9/4 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
+- git 干净，已推 `github.com/donggedaye/aivoice`（private）。
+
+### 档案地图
+```
+android/app/src/main/kotlin/app/aivoice/mobile/
+  RecordingService.kt   前台服务录音。AudioRecord 全程不停，只轮替输出档，
+                        所以分片边界不掉音。AAC-LC ADTS 裸流，分片可直接 cat 串接。
+                        结束时一定送 onStopped(interrupted, message)。
+  RecordingChannel.kt   MethodChannel app.aivoice.mobile/recording
+                        权限（每次录音前重查，因应「仅本次允许」）、start/stop/state
+                        EventChannel amplitude / chunk / error / stopped
+  AsrBridge.kt          MethodChannel app.aivoice.mobile/asr
+                        decodeToPcm（MediaExtractor+MediaCodec）、sha256、networkType
+                        全部丢背景执行绪，避免 ANR
+lib/
+  app/                  providers.dart（DI）、theme.dart（配色）、app_gate.dart（模型关卡）
+  core/platform/        recording_channel.dart、asr_channel.dart
+  core/storage/         model_manager.dart（模型清单、校验值、就绪检查）
+  core/network/         model_downloader.dart（Range 续传、SHA-256、失败删档）
+  core/utils/           opencc.dart（自实作 s2twp）
+  data/local/           asr_worker.dart（常驻辨识 isolate）
+  data/repositories_impl/  recording_ / transcription_repository_impl.dart
+  domain/               entities（Recording / RecordingSummary / Transcript）、
+                        repositories、usecases（RecordAudio / TranscribeLocally）
+  features/record/      record_controller.dart、record_page.dart、widgets/waveform_view.dart
+  features/settings/    model_download_controller.dart、model_download_page.dart
+assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
+test/                   widget_test / opencc_test / asr_worker_test，共 9 条
+```
+
+### 转写管线
+```
+chunk_*.aac →（合并成 transcode.aac）→ AsrBridge 解码成 16 kHz mono PCM
+  → AsrWorker（常驻 isolate：OfflineRecognizer + silero-vad 只载入一次）
+  → VAD 切段、逐段辨识、带 start/end 时间戳
+  → OpenCC s2twp + 台湾日常用字覆写
+  → Transcript
+中间产物 transcode.aac / transcode.pcm 在 finally 里删掉，失败也清。
+PCM 边读边喂（每次 1 秒），不整档载入 —— 6 bytes/取样，一小时会到 345 MB。
+AsrWorker 闲置 5 分钟送 stop 让 worker 自己 free 原生记忆体。
+```
+
+### 关键决定与踩过的坑
+- **模型**：SenseVoice-small int8 228 MB + tokens.txt + silero_vad.onnx 643 KB，合计 229 MB。
+  只抓单档，不下载官方那包 1.05 GB 的 tar.bz2。
+  **Hugging Face 的 ETag 不是 SHA-256**（该 repo 走 Xet 储存）—— 我踩过一次，
+  校验值一律自己下载后算。
+- **OpenCC 自实作**：pub.dev 上 `opencc` 依赖已被取代的 native_assets_cli、
+  `flutter_opencc` 停在 Dart 2，两个都不能用。照 `s2twp.json` 的转换链自己写：
+  STPhrases 短路 STCharacters → TWPhrases ∪ TWVariantsPhrases ∪ TWVariants
+  → 自己维护的 `_taiwanEveryday`（把 臺 收回 台，因为台湾人日常写「台」）。
+  字典解析在 `Isolate.run` 里跑；闭包只能捕捉字串，捕到 AssetBundle 会 unsendable。
+- **隐私**：`allowBackup=false` + `data_extraction_rules.xml`（cloud-backup 与
+  device-transfer 都排除全部 domain）。录音不自动删除，只有用户主动删除才消失。
+- **权限**：不加 permission_handler，全部走 Kotlin 原生 requestPermissions。
+  区分 denied / permanentlyDenied，后者引导去系统设定。
+- **go_router** 已在 pubspec 但还没接，等 9/5 有第二页再接。
+- **drift** 只写进 pubspec，未写任何代码、未跑 codegen。
+
+### 模拟器上怎么验转写（模拟器麦克风只录得到静音）
+```bash
+export PATH=/home/roo/Development/Server/flutter/bin:$PATH
+# 1. 备妥测试语音（16 kHz mono AAC ADTS，和 App 录出来的格式一致）
+curl -sL "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/test_wavs/zh.wav" -o /tmp/zh.wav
+for i in $(seq 1 108); do echo "file '/tmp/zh.wav'"; done > /tmp/l.txt
+ffmpeg -f concat -safe 0 -i /tmp/l.txt -c copy /tmp/long.wav
+ffmpeg -i /tmp/long.wav -ar 16000 -ac 1 -c:a aac -b:a 32k -f adts /tmp/speech10.aac  # 约 10 分 01 秒
+adb push /tmp/speech10.aac /data/local/tmp/speech10.aac
+# 2. 在 App 里随便录 5 秒建立目录，停止后把分片换掉
+D=$(adb exec-out run-as app.aivoice.mobile ls files/recordings | tr -d '\r')
+adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/app.aivoice.mobile/files/recordings/$D/chunk_0000.aac"
+# 3. 按「开始转写」。计时不要靠截图判断，用中间产物当讯号：
+#    transcode.* 出现 = 开始，消失 = 结束
+```
+预期：108 段、10 分 01 秒音频冷启 34 秒、台湾正体。
+
+### 已知问题
+- 9/4 的效能数字全部来自模拟器，真机是 arm64，快慢未知。**尚未在真机量过。**
+- 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
+  这是辨识准确度问题，9/7 归类转写错误时一并记录。
+- `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
+
+### 下一项
+9/5 转写页：段落列表、点段落回放对应音频。顺便把转写显示从录音页搬走、接上 go_router。
+段落已经带 startMs/endMs，回放要能按时间定位到 `chunk_*.aac`（30 秒一片，可算出第几片）。
