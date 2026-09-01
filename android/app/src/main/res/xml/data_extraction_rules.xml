@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  錄音、轉寫、模型全部排除在備份之外。
+
+  `allowBackup="false"` 在 Android 12 以下就足以關掉 Auto Backup 與 adb backup，
+  但 Android 12（API 31）起的裝置間轉移不受它管，必須靠 device-transfer 明確排除。
+  兩段都寫，才對得上「音訊只留在這支手機、只有使用者主動刪除才消失」。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>

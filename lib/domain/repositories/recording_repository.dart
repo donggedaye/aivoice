@@ -19,5 +19,7 @@ abstract class RecordingRepository {
   Future<RecordingSummary> summarize(Recording recording);
 
   /// 把分片依序串成單一檔案，回傳輸出路徑。
-  Future<String> mergeChunks(Recording recording);
+  /// [outputName] 預設是使用者按「合併」時要保留的 `full.aac`；
+  /// 轉寫那種用完就丟的中間產物請自己指定別的檔名。
+  Future<String> mergeChunks(Recording recording, {String outputName});
 }

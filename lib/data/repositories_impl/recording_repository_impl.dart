@@ -73,13 +73,16 @@ class RecordingRepositoryImpl implements RecordingRepository {
   }
 
   @override
-  Future<String> mergeChunks(Recording recording) async {
+  Future<String> mergeChunks(
+    Recording recording, {
+    String outputName = _mergedName,
+  }) async {
     final files = _chunkFiles(recording.dirPath);
     if (files.isEmpty) {
       throw StateError('no chunks in ${recording.dirPath}');
     }
 
-    final output = File('${recording.dirPath}${Platform.pathSeparator}$_mergedName');
+    final output = File('${recording.dirPath}${Platform.pathSeparator}$outputName');
     final sink = output.openWrite();
     try {
       // ADTS 每幀自帶長度，直接串接位元組就是合法檔案。

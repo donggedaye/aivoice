@@ -59,7 +59,10 @@ android/app/src/main/kotlin/.../
 - Flutter（稳定版）+ Riverpod + drift + go_router + dio
 - ASR：sherpa-onnx（官方 Flutter 插件）+ SenseVoice-small int8；silero-vad 切段；OpenCC `s2twp` 转繁
 - ASR 模型文件首次启动下载（带进度、断点续传、校验），**不打进 APK**
-- 音频：16 kHz 单声道，本地 Opus/AAC，默认 7 天后自动删除
+- 音频：16 kHz 单声道，本地 Opus/AAC；**不自动删除**，只有用户主动删除才消失
+- 中间产物（转写用的 `decoded.pcm`、合并档 `full.aac`）用完即删，可随时从分片重建；
+  「不自动删除」只保护原始录音分片
+- 音频不进任何备份：`allowBackup=false` + `dataExtractionRules` 同时排除云端备份与装置间转移
 - 所有异步任务（转写、分析）走本地持久化队列，可离线排队，联网后自动执行
 - 后端：Python FastAPI
 
