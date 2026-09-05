@@ -1,14 +1,16 @@
 import 'dart:io';
 
 import '../../core/platform/recording_channel.dart';
+import '../../core/storage/recording_store.dart';
 import '../../core/utils/adts.dart';
 import '../../domain/entities/recording.dart';
 import '../../domain/repositories/recording_repository.dart';
 
 class RecordingRepositoryImpl implements RecordingRepository {
-  const RecordingRepositoryImpl(this._channel);
+  const RecordingRepositoryImpl(this._channel, this._store);
 
   final RecordingChannel _channel;
+  final RecordingStore _store;
 
   static const String _chunkPrefix = 'chunk_';
   static const String _mergedName = 'full.aac';
@@ -62,6 +64,7 @@ class RecordingRepositoryImpl implements RecordingRepository {
     return RecordingSummary(
       id: recording.id,
       dirPath: recording.dirPath,
+      startedAt: recording.startedAt,
       chunks: chunks,
       duration: adtsFramesToDuration(totalFrames),
       totalBytes: totalBytes,
@@ -96,6 +99,48 @@ class RecordingRepositoryImpl implements RecordingRepository {
   @override
   Future<List<String>> chunkPaths(Recording recording) async =>
       [for (final file in _chunkFiles(recording.dirPath)) file.path];
+
+  @override
+  Future<List<RecordingSummary>> list() async {
+    final base = await _channel.recordingsDir();
+    final summaries = <RecordingSummary>[];
+    for (final id in _store.listIds(base)) {
+      // 目錄名就是開始錄音的 epoch 毫秒，時長還是照分片的幀數實測。
+      summaries.add(
+        await summarize(
+          Recording(
+            id: id,
+            dirPath: _store.pathOf(base, id),
+            startedAt: DateTime.fromMillisecondsSinceEpoch(int.parse(id)),
+          ),
+        ),
+      );
+    }
+    return summaries;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    await _refuseWhileRecording();
+    await _store.deleteOne(await _channel.recordingsDir(), id);
+  }
+
+  @override
+  Future<int> deleteAll() async {
+    await _refuseWhileRecording();
+    return _store.deleteAll(await _channel.recordingsDir());
+  }
+
+  @override
+  Future<int> usedBytes() async =>
+      _store.totalBytes(await _channel.recordingsDir());
+
+  /// 錄音進行中就整個擋下來。分片還在寫，這時候刪目錄只會留下半個檔案。
+  Future<void> _refuseWhileRecording() async {
+    if (await isRecording()) {
+      throw StateError('錄音進行中，請先停止再刪除');
+    }
+  }
 
   List<File> _chunkFiles(String dirPath) {
     final dir = Directory(dirPath);

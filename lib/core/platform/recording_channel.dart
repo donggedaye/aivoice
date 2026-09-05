@@ -27,6 +27,13 @@ class RecordingChannel {
 
   Future<void> openAppSettings() => _method.invokeMethod<void>('openAppSettings');
 
+  /// 所有錄音目錄的根。列表與刪除都以這個路徑為界。
+  Future<String> recordingsDir() async {
+    final path = await _method.invokeMethod<String>('recordingsDir');
+    if (path == null) throw StateError('recordingsDir returned null');
+    return path;
+  }
+
   Future<Recording> start() async {
     final result = await _method.invokeMapMethod<String, String>('start');
     if (result == null) {

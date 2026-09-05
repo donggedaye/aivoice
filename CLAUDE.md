@@ -126,8 +126,8 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
 
 ### 状态
-- PLAN.md 第 1 周：9/1–9/5 已打勾，**下一项是 9/6 录音列表 / 删除 / 设置页**。
-- 9/2、9/3 由本人真机验过；9/4、9/5 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
+- PLAN.md 第 1 周：9/1–9/6 已打勾，**下一项是 9/7 用真实对话测试并归类转写错误**。
+- 9/2、9/3 由本人真机验过；9/4–9/6 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
 ### 档案地图
@@ -147,20 +147,25 @@ android/app/src/main/kotlin/app/aivoice/mobile/
                         一次只有一个播放器，换段先 release。不做 seek。
 lib/
   app/                  providers.dart（DI）、theme.dart（配色）、app_gate.dart（模型关卡）、
-                        router.dart（go_router：/ → AppGate、/transcript）
+                        router.dart（go_router：/ → AppGate，子路由 transcript/recordings/settings）
   core/platform/        recording_channel.dart、asr_channel.dart、playback_channel.dart
-  core/storage/         model_manager.dart（模型清单、校验值、就绪检查）
+  core/storage/         model_manager.dart（模型清单、校验值、就绪检查）、
+                        recording_store.dart（列出 / 删除录音目录，只认数字目录名）
   core/network/         model_downloader.dart（Range 续传、SHA-256、失败删档）
-  core/utils/           opencc.dart（自实作 s2twp）、adts.dart（幀走访 + 按时间切幀）
+  core/utils/           opencc.dart（自实作 s2twp）、adts.dart（幀走访 + 按时间切幀）、
+                        errors.dart（把 StateError 的「Bad state:」挡在 UI 之外）
   data/local/           asr_worker.dart（常驻辨识 isolate）
   data/repositories_impl/  recording_ / transcription_ / playback_repository_impl.dart
   domain/               entities（Recording / RecordingSummary / Transcript / PlaybackEvent）、
-                        repositories、usecases（RecordAudio / TranscribeLocally / PlaySegment）
+                        repositories、usecases（RecordAudio / TranscribeLocally / PlaySegment /
+                        ManageRecordings）
   features/record/      record_controller.dart、record_page.dart、widgets/waveform_view.dart
   features/transcript/  transcript_controller.dart、transcript_page.dart
-  features/settings/    model_download_controller.dart、model_download_page.dart
+  features/recordings/  recordings_controller.dart、recordings_page.dart
+  features/settings/    model_download_*.dart、settings_controller.dart、settings_page.dart
 assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
-test/                   widget_test / opencc_test / asr_worker_test / adts_test，共 16 条
+test/                   widget_test / opencc_test / asr_worker_test / adts_test /
+                        recording_store_test，共 24 条
 ```
 
 ### 转写管线
@@ -209,6 +214,12 @@ AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才
 - **不要在 State.dispose 里改 Riverpod 的 state**：那时 element 已经 defunct，
   会撞 `markNeedsBuild` 的断言，而且监听解不乾净 —— 之后每次改 state 都会再爆一次
   （连正常点击都失效）。我为了「离开页面就停播放」试了三种写法都踩到，最后放弃这个行为。
+- **录音列表不走资料库**：目录名就是开始录音的 epoch 毫秒，时长照分片幀数实测，
+  一片才 120 KB，串著读不占记忆体。现在上 drift 只是把同一份资料再抄一次。
+  等 9/9 Claim 真的要存的时候再一起上。
+- **删除只认 id**：`RecordingStore` 自己用 `baseDir + id` 组路径，不接受外面传进来的
+  任意路径，`id` 必须全是数字。免得哪天误删到 `files/models/` 那 229 MB。
+  录音进行中一律挡下删除（分片还在写，删了只会留半个档）。
 - **drift** 只写进 pubspec，未写任何代码、未跑 codegen。
 
 ### 模拟器上怎么验转写（模拟器麦克风只录得到静音）
@@ -229,6 +240,10 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 预期：108 段、10 分 01 秒音频冷启 34 秒、台湾正体。
 
 ### 已知问题
+- **转写结果不持久化**。从列表点开旧录音会重新转写（10 分钟约 30 秒）。
+  要存下来得先有 drift，等 9/9 一起做。
+- **列表是同步一次算完的**。9 笔录音要读完所有分片才显示，目前不到 1 秒；
+  录音数量上来之后要改成边算边显示或快取。
 - **离开转写页不会停止播放**。段落最长几秒，播完自己会停并删掉 segment.aac，
   但按返回后声音还会继续。原因见上面 dispose 那条，9/6 之后再想别的做法。
 - 模拟器听不到声音，所以「点段落有对应的声音」只验到：切出来的 segment.aac
@@ -240,6 +255,5 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 
 ### 下一项
-9/6 录音列表、单笔删除、设置页（清空全部数据）；音频不自动清理。
-录音现在只活在记忆体里（`currentRecordingProvider`），列表要能从 `files/recordings/`
-扫出所有目录；这一项大概是 drift 第一次真的要用上的时候。
+9/7 用 3 段真实对话测试，把转写错误按 人名/数字/中英夹杂/噪音 分类记入 `docs/asr-errors.md`。
+这一项要真机、要真人讲话，模拟器帮不上忙。

@@ -15,7 +15,21 @@ class RecordPage extends ConsumerWidget {
     final controller = ref.read(recordControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('錄音')),
+      appBar: AppBar(
+        title: const Text('錄音'),
+        actions: [
+          IconButton(
+            onPressed: () => context.push('/recordings'),
+            icon: const Icon(Icons.list),
+            tooltip: '錄音列表',
+          ),
+          IconButton(
+            onPressed: () => context.push('/settings'),
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '設定',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),

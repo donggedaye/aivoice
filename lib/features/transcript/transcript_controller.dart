@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/utils/errors.dart';
 import '../../domain/entities/playback.dart';
 import '../../domain/entities/transcript.dart';
 
@@ -90,7 +91,7 @@ class TranscriptController extends Notifier<TranscriptState> {
       final transcript = await ref.read(transcribeLocallyProvider)(recording);
       state = state.copyWith(transcribing: false, transcript: transcript);
     } catch (e) {
-      state = state.copyWith(transcribing: false, error: e.toString());
+      state = state.copyWith(transcribing: false, error: describeError(e));
     }
   }
 
@@ -114,7 +115,7 @@ class TranscriptController extends Notifier<TranscriptState> {
     try {
       await player(recording, segment);
     } catch (e) {
-      state = state.copyWith(error: e.toString(), clearPlaying: true);
+      state = state.copyWith(error: describeError(e), clearPlaying: true);
     }
   }
 

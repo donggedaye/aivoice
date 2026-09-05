@@ -21,6 +21,18 @@ abstract class RecordingRepository {
   /// 依錄音順序列出分片路徑。回放要靠這個順序算幀的編號。
   Future<List<String>> chunkPaths(Recording recording);
 
+  /// 列出裝置上所有錄音，新的在前面。
+  Future<List<RecordingSummary>> list();
+
+  /// 刪掉一次錄音的全部檔案。錄音進行中不給刪。
+  Future<void> delete(String id);
+
+  /// 刪掉全部錄音，回傳刪掉幾筆。錄音進行中不給刪。
+  Future<int> deleteAll();
+
+  /// 錄音佔用的總位元組。不含語音模型。
+  Future<int> usedBytes();
+
   /// 把分片依序串成單一檔案，回傳輸出路徑。
   /// [outputName] 預設是使用者按「合併」時要保留的 `full.aac`；
   /// 轉寫那種用完就丟的中間產物請自己指定別的檔名。

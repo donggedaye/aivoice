@@ -48,6 +48,7 @@ class RecordingSummary {
   const RecordingSummary({
     required this.id,
     required this.dirPath,
+    required this.startedAt,
     required this.chunks,
     required this.duration,
     required this.totalBytes,
@@ -56,6 +57,7 @@ class RecordingSummary {
 
   final String id;
   final String dirPath;
+  final DateTime startedAt;
   final List<ChunkInfo> chunks;
   final Duration duration;
   final int totalBytes;
@@ -64,6 +66,9 @@ class RecordingSummary {
   final bool hasCorruptChunk;
 
   int get chunkCount => chunks.length;
+
+  Recording get recording =>
+      Recording(id: id, dirPath: dirPath, startedAt: startedAt);
 }
 
 sealed class RecordingEvent {

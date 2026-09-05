@@ -6,6 +6,7 @@ import '../core/platform/asr_channel.dart';
 import '../core/platform/playback_channel.dart';
 import '../core/platform/recording_channel.dart';
 import '../core/storage/model_manager.dart';
+import '../core/storage/recording_store.dart';
 import '../data/local/asr_worker.dart';
 import '../data/repositories_impl/playback_repository_impl.dart';
 import '../data/repositories_impl/recording_repository_impl.dart';
@@ -14,6 +15,7 @@ import '../domain/entities/recording.dart';
 import '../domain/repositories/playback_repository.dart';
 import '../domain/repositories/recording_repository.dart';
 import '../domain/repositories/transcription_repository.dart';
+import '../domain/usecases/manage_recordings.dart';
 import '../domain/usecases/play_segment.dart';
 import '../domain/usecases/record_audio.dart';
 import '../domain/usecases/transcribe_locally.dart';
@@ -58,8 +60,15 @@ final modelReadyProvider = FutureProvider<bool>(
   (ref) => ref.watch(modelManagerProvider).isReady(),
 );
 
+final recordingStoreProvider = Provider<RecordingStore>(
+  (ref) => const RecordingStore(),
+);
+
 final recordingRepositoryProvider = Provider<RecordingRepository>(
-  (ref) => RecordingRepositoryImpl(ref.watch(recordingChannelProvider)),
+  (ref) => RecordingRepositoryImpl(
+    ref.watch(recordingChannelProvider),
+    ref.watch(recordingStoreProvider),
+  ),
 );
 
 /// 常駐辨識 isolate。模型只載入一次，App 關閉時才釋放。
@@ -91,6 +100,10 @@ final recordAudioProvider = Provider<RecordAudio>(
 
 final playSegmentProvider = Provider<PlaySegment>(
   (ref) => PlaySegment(ref.watch(playbackRepositoryProvider)),
+);
+
+final manageRecordingsProvider = Provider<ManageRecordings>(
+  (ref) => ManageRecordings(ref.watch(recordingRepositoryProvider)),
 );
 
 final transcribeLocallyProvider = Provider<TranscribeLocally>(
