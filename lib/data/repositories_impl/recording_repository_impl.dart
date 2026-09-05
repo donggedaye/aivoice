@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import '../../core/platform/recording_channel.dart';
+import '../../core/utils/adts.dart';
 import '../../domain/entities/recording.dart';
 import '../../domain/repositories/recording_repository.dart';
 
@@ -10,9 +10,6 @@ class RecordingRepositoryImpl implements RecordingRepository {
 
   final RecordingChannel _channel;
 
-  /// AAC-LC 每幀固定 1024 個取樣，取樣率 16 kHz，所以每幀 64 ms。
-  static const int _samplesPerFrame = 1024;
-  static const int _sampleRate = 16000;
   static const String _chunkPrefix = 'chunk_';
   static const String _mergedName = 'full.aac';
 
@@ -47,7 +44,7 @@ class RecordingRepositoryImpl implements RecordingRepository {
 
     for (var i = 0; i < files.length; i++) {
       final bytes = await files[i].readAsBytes();
-      final scan = _scanAdts(bytes);
+      final scan = scanAdts(bytes);
       corrupt = corrupt || !scan.clean;
       totalFrames += scan.frames;
       totalBytes += bytes.length;
@@ -57,7 +54,7 @@ class RecordingRepositoryImpl implements RecordingRepository {
           index: i,
           bytes: bytes.length,
           frames: scan.frames,
-          duration: _framesToDuration(scan.frames),
+          duration: adtsFramesToDuration(scan.frames),
         ),
       );
     }
@@ -66,7 +63,7 @@ class RecordingRepositoryImpl implements RecordingRepository {
       id: recording.id,
       dirPath: recording.dirPath,
       chunks: chunks,
-      duration: _framesToDuration(totalFrames),
+      duration: adtsFramesToDuration(totalFrames),
       totalBytes: totalBytes,
       hasCorruptChunk: corrupt,
     );
@@ -96,6 +93,10 @@ class RecordingRepositoryImpl implements RecordingRepository {
     return output.path;
   }
 
+  @override
+  Future<List<String>> chunkPaths(Recording recording) async =>
+      [for (final file in _chunkFiles(recording.dirPath)) file.path];
+
   List<File> _chunkFiles(String dirPath) {
     final dir = Directory(dirPath);
     if (!dir.existsSync()) return const [];
@@ -109,35 +110,4 @@ class RecordingRepositoryImpl implements RecordingRepository {
   }
 
   String _basename(String path) => path.split(Platform.pathSeparator).last;
-
-  Duration _framesToDuration(int frames) => Duration(
-        microseconds: frames * _samplesPerFrame * 1000000 ~/ _sampleRate,
-      );
-
-  /// 走訪 ADTS 幀。任何一幀同步字對不上就停止，並回報檔案不乾淨。
-  _AdtsScan _scanAdts(Uint8List bytes) {
-    var offset = 0;
-    var frames = 0;
-    while (offset + 7 <= bytes.length) {
-      if (bytes[offset] != 0xFF || (bytes[offset + 1] & 0xF0) != 0xF0) {
-        return _AdtsScan(frames: frames, clean: false);
-      }
-      final length = ((bytes[offset + 3] & 0x03) << 11) |
-          (bytes[offset + 4] << 3) |
-          ((bytes[offset + 5] & 0xE0) >> 5);
-      if (length < 7 || offset + length > bytes.length) {
-        return _AdtsScan(frames: frames, clean: false);
-      }
-      offset += length;
-      frames++;
-    }
-    return _AdtsScan(frames: frames, clean: offset == bytes.length);
-  }
-}
-
-class _AdtsScan {
-  const _AdtsScan({required this.frames, required this.clean});
-
-  final int frames;
-  final bool clean;
 }

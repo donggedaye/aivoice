@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'app/app_gate.dart';
+import 'app/router.dart';
 import 'app/theme.dart';
 
 void main() {
@@ -13,10 +13,10 @@ class AivoiceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'AI 工作副駕駛',
       theme: buildAppTheme(),
-      home: const AppGate(),
+      routerConfig: appRouter,
     );
   }
 }

@@ -3,19 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/model_downloader.dart';
 import '../core/platform/asr_channel.dart';
+import '../core/platform/playback_channel.dart';
 import '../core/platform/recording_channel.dart';
 import '../core/storage/model_manager.dart';
 import '../data/local/asr_worker.dart';
+import '../data/repositories_impl/playback_repository_impl.dart';
 import '../data/repositories_impl/recording_repository_impl.dart';
 import '../data/repositories_impl/transcription_repository_impl.dart';
+import '../domain/entities/recording.dart';
+import '../domain/repositories/playback_repository.dart';
 import '../domain/repositories/recording_repository.dart';
 import '../domain/repositories/transcription_repository.dart';
+import '../domain/usecases/play_segment.dart';
 import '../domain/usecases/record_audio.dart';
 import '../domain/usecases/transcribe_locally.dart';
 
 final recordingChannelProvider = Provider<RecordingChannel>(
   (ref) => const RecordingChannel(),
 );
+
+final playbackChannelProvider = Provider<PlaybackChannel>(
+  (ref) => const PlaybackChannel(),
+);
+
+/// 剛錄完、正要處理的那一次錄音。錄音頁寫入，轉寫頁讀取。
+/// 9/6 有錄音列表之後，這裡會改成從列表選出來的那一筆。
+final currentRecordingProvider = StateProvider<Recording?>((ref) => null);
 
 final asrChannelProvider = Provider<AsrChannel>((ref) => const AsrChannel());
 
@@ -65,8 +78,19 @@ final transcriptionRepositoryProvider = Provider<TranscriptionRepository>(
   ),
 );
 
+final playbackRepositoryProvider = Provider<PlaybackRepository>(
+  (ref) => PlaybackRepositoryImpl(
+    ref.watch(playbackChannelProvider),
+    ref.watch(recordingRepositoryProvider),
+  ),
+);
+
 final recordAudioProvider = Provider<RecordAudio>(
   (ref) => RecordAudio(ref.watch(recordingRepositoryProvider)),
+);
+
+final playSegmentProvider = Provider<PlaySegment>(
+  (ref) => PlaySegment(ref.watch(playbackRepositoryProvider)),
 );
 
 final transcribeLocallyProvider = Provider<TranscribeLocally>(

@@ -126,8 +126,8 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
 
 ### 状态
-- PLAN.md 第 1 周：9/1–9/4 已打勾，**下一项是 9/5 转写页**。
-- 9/2、9/3 由本人真机验过；9/4 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
+- PLAN.md 第 1 周：9/1–9/5 已打勾，**下一项是 9/6 录音列表 / 删除 / 设置页**。
+- 9/2、9/3 由本人真机验过；9/4、9/5 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
 ### 档案地图
@@ -142,20 +142,25 @@ android/app/src/main/kotlin/app/aivoice/mobile/
   AsrBridge.kt          MethodChannel app.aivoice.mobile/asr
                         decodeToPcm（MediaExtractor+MediaCodec）、sha256、networkType
                         全部丢背景执行绪，避免 ANR
+  PlaybackBridge.kt     MethodChannel app.aivoice.mobile/playback + EventChannel
+                        playback_events。MediaPlayer 播 Dart 端切好的小档，
+                        一次只有一个播放器，换段先 release。不做 seek。
 lib/
-  app/                  providers.dart（DI）、theme.dart（配色）、app_gate.dart（模型关卡）
-  core/platform/        recording_channel.dart、asr_channel.dart
+  app/                  providers.dart（DI）、theme.dart（配色）、app_gate.dart（模型关卡）、
+                        router.dart（go_router：/ → AppGate、/transcript）
+  core/platform/        recording_channel.dart、asr_channel.dart、playback_channel.dart
   core/storage/         model_manager.dart（模型清单、校验值、就绪检查）
   core/network/         model_downloader.dart（Range 续传、SHA-256、失败删档）
-  core/utils/           opencc.dart（自实作 s2twp）
+  core/utils/           opencc.dart（自实作 s2twp）、adts.dart（幀走访 + 按时间切幀）
   data/local/           asr_worker.dart（常驻辨识 isolate）
-  data/repositories_impl/  recording_ / transcription_repository_impl.dart
-  domain/               entities（Recording / RecordingSummary / Transcript）、
-                        repositories、usecases（RecordAudio / TranscribeLocally）
+  data/repositories_impl/  recording_ / transcription_ / playback_repository_impl.dart
+  domain/               entities（Recording / RecordingSummary / Transcript / PlaybackEvent）、
+                        repositories、usecases（RecordAudio / TranscribeLocally / PlaySegment）
   features/record/      record_controller.dart、record_page.dart、widgets/waveform_view.dart
+  features/transcript/  transcript_controller.dart、transcript_page.dart
   features/settings/    model_download_controller.dart、model_download_page.dart
 assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
-test/                   widget_test / opencc_test / asr_worker_test，共 9 条
+test/                   widget_test / opencc_test / asr_worker_test / adts_test，共 16 条
 ```
 
 ### 转写管线
@@ -168,6 +173,18 @@ chunk_*.aac →（合并成 transcode.aac）→ AsrBridge 解码成 16 kHz mono 
 中间产物 transcode.aac / transcode.pcm 在 finally 里删掉，失败也清。
 PCM 边读边喂（每次 1 秒），不整档载入 —— 6 bytes/取样，一小时会到 345 MB。
 AsrWorker 闲置 5 分钟送 stop 让 worker 自己 free 原生记忆体。
+```
+
+### 段落回放管线
+```
+点段落 → AdtsRangeCollector（startMs, endMs）
+  → 依序读 chunk_*.aac，幀在所有分片间连续编号，收满就不再读
+  → 写出 segment.aac（只含该段的幀，本身就是合法 ADTS）
+  → PlaybackBridge 的 MediaPlayer 播它
+  → 播完 / 换段 / 点同一段 → 停止并删掉 segment.aac
+不用 seek：ADTS 没有索引，播放器只能靠位元率估位置。
+AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才对得准。
+定位误差最多一幀（64 ms），跨分片边界不用特别处理。
 ```
 
 ### 关键决定与踩过的坑
@@ -184,7 +201,14 @@ AsrWorker 闲置 5 分钟送 stop 让 worker 自己 free 原生记忆体。
   device-transfer 都排除全部 domain）。录音不自动删除，只有用户主动删除才消失。
 - **权限**：不加 permission_handler，全部走 Kotlin 原生 requestPermissions。
   区分 denied / permanentlyDenied，后者引导去系统设定。
-- **go_router** 已在 pubspec 但还没接，等 9/5 有第二页再接。
+- **回放不加第三方套件**：pub.dev 的播放套件都要先合成连续档才有时间轴，
+  而 ADTS 的 seek 是估的。改成自己按幀切片 + 原生 MediaPlayer，
+  幀走访逻辑跟 `summarize` 共用 `core/utils/adts.dart`。
+- **go_router** 9/5 接上。`/` 仍是 AppGate（决定录音页还是模型下载页），
+  `/transcript` 是它的子路由，用 `context.push` 进去。
+- **不要在 State.dispose 里改 Riverpod 的 state**：那时 element 已经 defunct，
+  会撞 `markNeedsBuild` 的断言，而且监听解不乾净 —— 之后每次改 state 都会再爆一次
+  （连正常点击都失效）。我为了「离开页面就停播放」试了三种写法都踩到，最后放弃这个行为。
 - **drift** 只写进 pubspec，未写任何代码、未跑 codegen。
 
 ### 模拟器上怎么验转写（模拟器麦克风只录得到静音）
@@ -205,11 +229,17 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 预期：108 段、10 分 01 秒音频冷启 34 秒、台湾正体。
 
 ### 已知问题
+- **离开转写页不会停止播放**。段落最长几秒，播完自己会停并删掉 segment.aac，
+  但按返回后声音还会继续。原因见上面 dispose 那条，9/6 之后再想别的做法。
+- 模拟器听不到声音，所以「点段落有对应的声音」只验到：切出来的 segment.aac
+  幀对齐、时长与段落一致、位元组能在原始音档里唯一比中（例如 08:07 那段
+  切在 487296 ms）。**实际听感要真机确认。**
 - 9/4 的效能数字全部来自模拟器，真机是 arm64，快慢未知。**尚未在真机量过。**
 - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
   这是辨识准确度问题，9/7 归类转写错误时一并记录。
 - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 
 ### 下一项
-9/5 转写页：段落列表、点段落回放对应音频。顺便把转写显示从录音页搬走、接上 go_router。
-段落已经带 startMs/endMs，回放要能按时间定位到 `chunk_*.aac`（30 秒一片，可算出第几片）。
+9/6 录音列表、单笔删除、设置页（清空全部数据）；音频不自动清理。
+录音现在只活在记忆体里（`currentRecordingProvider`），列表要能从 `files/recordings/`
+扫出所有目录；这一项大概是 drift 第一次真的要用上的时候。

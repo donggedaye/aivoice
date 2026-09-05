@@ -7,6 +7,7 @@ class MainActivity : FlutterActivity() {
 
     private var recordingChannel: RecordingChannel? = null
     private var asrBridge: AsrBridge? = null
+    private var playbackBridge: PlaybackBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -18,6 +19,7 @@ class MainActivity : FlutterActivity() {
             applicationContext,
             flutterEngine.dartExecutor.binaryMessenger,
         )
+        playbackBridge = PlaybackBridge(flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onRequestPermissionsResult(
@@ -39,6 +41,8 @@ class MainActivity : FlutterActivity() {
         recordingChannel = null
         asrBridge?.dispose()
         asrBridge = null
+        playbackBridge?.dispose()
+        playbackBridge = null
         super.onDestroy()
     }
 }
