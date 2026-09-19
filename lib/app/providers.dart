@@ -5,15 +5,18 @@ import '../core/network/model_downloader.dart';
 import '../core/platform/asr_channel.dart';
 import '../core/platform/playback_channel.dart';
 import '../core/platform/recording_channel.dart';
+import '../core/storage/app_database.dart';
 import '../core/storage/model_manager.dart';
 import '../core/storage/recording_store.dart';
 import '../data/local/asr_worker.dart';
 import '../data/repositories_impl/playback_repository_impl.dart';
 import '../data/repositories_impl/recording_repository_impl.dart';
+import '../data/repositories_impl/transcript_repository_impl.dart';
 import '../data/repositories_impl/transcription_repository_impl.dart';
 import '../domain/entities/recording.dart';
 import '../domain/repositories/playback_repository.dart';
 import '../domain/repositories/recording_repository.dart';
+import '../domain/repositories/transcript_repository.dart';
 import '../domain/repositories/transcription_repository.dart';
 import '../domain/usecases/manage_recordings.dart';
 import '../domain/usecases/play_segment.dart';
@@ -64,6 +67,17 @@ final recordingStoreProvider = Provider<RecordingStore>(
   (ref) => const RecordingStore(),
 );
 
+/// 本機資料庫。目前只存轉寫；9/23 之後 Claim 也進這裡。
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  final db = AppDatabase();
+  ref.onDispose(db.close);
+  return db;
+});
+
+final transcriptRepositoryProvider = Provider<TranscriptRepository>(
+  (ref) => TranscriptRepositoryImpl(ref.watch(appDatabaseProvider)),
+);
+
 final recordingRepositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepositoryImpl(
     ref.watch(recordingChannelProvider),
@@ -103,9 +117,15 @@ final playSegmentProvider = Provider<PlaySegment>(
 );
 
 final manageRecordingsProvider = Provider<ManageRecordings>(
-  (ref) => ManageRecordings(ref.watch(recordingRepositoryProvider)),
+  (ref) => ManageRecordings(
+    ref.watch(recordingRepositoryProvider),
+    ref.watch(transcriptRepositoryProvider),
+  ),
 );
 
 final transcribeLocallyProvider = Provider<TranscribeLocally>(
-  (ref) => TranscribeLocally(ref.watch(transcriptionRepositoryProvider)),
+  (ref) => TranscribeLocally(
+    ref.watch(transcriptionRepositoryProvider),
+    ref.watch(transcriptRepositoryProvider),
+  ),
 );

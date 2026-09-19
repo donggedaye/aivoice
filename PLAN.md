@@ -34,8 +34,10 @@
 
 ## 剩下 10 天（9/21–9/30）
 
-- [ ] 9/21 drift 上线：Recording / Transcript / Claim 三张表 + codegen
+- [x] 9/21 drift 上线：transcripts / transcript_segments 两张表 + codegen
       完成标准：转写结果落库，从列表点开旧录音不再重新转写
+      改动：不建 `recordings` 表（列表走档案系统已够快），`claims` 表移到 9/23
+      跟 `schema/claim.json` 一起定，免得建完就要迁移
 - [ ] 9/22 后端 FastAPI：单一 `/analyze`（内部跑 analyzer + verifier 两次调用）、
       设备令牌、每设备每日用量上限、部署
       完成标准：从手机打得到，超过上限会被挡

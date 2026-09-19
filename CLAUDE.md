@@ -129,7 +129,8 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 - **9/20 重排过 PLAN**：9/1–9/6 完成，9/7–9/19 停摆，剩 10 天砍掉一半以上。
   这个月只答 Q1（分得清事实与推断）与 Q3（有没有人问价格）；
   Q2（记忆／回访）与 Play 上架移到 10 月，砍掉的清单在 `NOT_NOW.md`。
-- **下一项是 9/21 drift 上线**（Recording / Transcript / Claim 三张表）。
+- **9/21 drift 已上线**（只建 transcripts / transcript_segments 两张表，理由见下）。
+  下一项是 **9/22 后端 FastAPI**。
 - 9/2、9/3 由本人真机验过；9/4–9/6 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
@@ -153,12 +154,14 @@ lib/
                         router.dart（go_router：/ → AppGate，子路由 transcript/recordings/settings）
   core/platform/        recording_channel.dart、asr_channel.dart、playback_channel.dart
   core/storage/         model_manager.dart（模型清单、校验值、就绪检查）、
-                        recording_store.dart（列出 / 删除录音目录，只认数字目录名）
+                        recording_store.dart（列出 / 删除录音目录，只认数字目录名）、
+                        app_database.dart + .g.dart（drift：transcripts / transcript_segments）
   core/network/         model_downloader.dart（Range 续传、SHA-256、失败删档）
   core/utils/           opencc.dart（自实作 s2twp）、adts.dart（幀走访 + 按时间切幀）、
                         errors.dart（把 StateError 的「Bad state:」挡在 UI 之外）
   data/local/           asr_worker.dart（常驻辨识 isolate）
-  data/repositories_impl/  recording_ / transcription_ / playback_repository_impl.dart
+  data/repositories_impl/  recording_ / transcription_ / playback_ /
+                        transcript_repository_impl.dart
   domain/               entities（Recording / RecordingSummary / Transcript / PlaybackEvent）、
                         repositories、usecases（RecordAudio / TranscribeLocally / PlaySegment /
                         ManageRecordings）
@@ -168,7 +171,7 @@ lib/
   features/settings/    model_download_*.dart、settings_controller.dart、settings_page.dart
 assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
 test/                   widget_test / opencc_test / asr_worker_test / adts_test /
-                        recording_store_test，共 24 条
+                        recording_store_test / app_database_test，共 30 条
 ```
 
 ### 转写管线
@@ -177,7 +180,7 @@ chunk_*.aac →（合并成 transcode.aac）→ AsrBridge 解码成 16 kHz mono 
   → AsrWorker（常驻 isolate：OfflineRecognizer + silero-vad 只载入一次）
   → VAD 切段、逐段辨识、带 start/end 时间戳
   → OpenCC s2twp + 台湾日常用字覆写
-  → Transcript
+  → Transcript → 存进 drift（再点开同一笔直接读库，不重转；「重新转写」才会覆写）
 中间产物 transcode.aac / transcode.pcm 在 finally 里删掉，失败也清。
 PCM 边读边喂（每次 1 秒），不整档载入 —— 6 bytes/取样，一小时会到 345 MB。
 AsrWorker 闲置 5 分钟送 stop 让 worker 自己 free 原生记忆体。
@@ -220,12 +223,18 @@ AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才
   解法是改用 `PopScope(canPop: false)` 拦下返回，**趁页面还活着**把播放停掉再 `context.pop()`，
   完全不碰 dispose。系统返回键与 AppBar 返回箭头都会走这条。
 - **录音列表不走资料库**：目录名就是开始录音的 epoch 毫秒，时长照分片幀数实测，
-  一片才 120 KB，串著读不占记忆体。现在上 drift 只是把同一份资料再抄一次。
-  等 9/9 Claim 真的要存的时候再一起上。
+  一片才 120 KB，串著读不占记忆体。9/21 上 drift 时也没把它搬进去。
 - **删除只认 id**：`RecordingStore` 自己用 `baseDir + id` 组路径，不接受外面传进来的
   任意路径，`id` 必须全是数字。免得哪天误删到 `files/models/` 那 229 MB。
   录音进行中一律挡下删除（分片还在写，删了只会留半个档）。
-- **drift** 只写进 pubspec，未写任何代码、未跑 codegen。
+- **drift 9/21 上线，但只建两张表**：`transcripts`（表头）与 `transcript_segments`。
+  不建 `recordings` 表 —— 录音列表走档案系统已经量过够快，多一张表就多一个真相来源。
+  `claims` 等 9/23 `schema/claim.json` 定案再建，现在建几乎一定要再迁移一次。
+  `transcripts` 表头看似多余，但少了它就分不出「转过但没语音（0 段）」与「还没转过」。
+  drift 的 row class 预设叫 `Transcript` / `TranscriptSegment`，会跟 domain entity 撞名，
+  用 `@DataClassName` 改成 `TranscriptRow` / `TranscriptSegmentRow`。
+  栏位不能叫 `text`，那是 drift 的栏位建构子，改叫 `content`。
+  `.g.dart` 有进版控，改完表要跑 `dart run build_runner build`。
 
 ### 模拟器上怎么验转写（模拟器麦克风只录得到静音）
 ```bash
@@ -245,8 +254,6 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 预期：108 段、10 分 01 秒音频冷启 34 秒、台湾正体。
 
 ### 已知问题
-- **转写结果不持久化**。从列表点开旧录音会重新转写（10 分钟约 30 秒）。
-  要存下来得先有 drift，等 9/9 一起做。
 - **列表一次算完才显示，但实测够快，9/20 决定先不动**。
   21 笔 10 分钟录音（51 MB）扫完要 107–128 ms，没有触发 Choreographer 的掉帧警告。
   另外量过「只读 7 位元组幀标头再 seek 跳过酬载」的写法，比整档读进来慢 6.7 倍
@@ -257,15 +264,14 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
   切在 487296 ms）。**实际听感要真机确认。**
 - 9/4 的效能数字全部来自模拟器，真机是 arm64，快慢未知。**尚未在真机量过。**
 - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
-  这是辨识准确度问题，9/7 归类转写错误时一并记录。
+  这是辨识准确度问题，9/28 归类转写错误时一并记录。
 - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 
 ### 下一项
-9/21 drift 上线：Recording / Transcript / Claim 三张表 + codegen。
-完成标准是转写结果落库，从列表点开旧录音不再重新转写。
-drift 目前只写进 pubspec，没有任何代码也没跑过 codegen。
+9/22 后端 FastAPI：单一 `/analyze`（内部跑 analyzer + verifier 两次调用）、
+设备令牌、每设备每日用量上限、部署。
 
-**9/22 的后端卡在两件我做不到的事**：模型服务选哪家、部署到哪。
+**卡在两件我做不到的事**：模型服务选哪家、部署到哪。
 限制是产品原则第 5 条，不能是中国大陆托管。API key 与主机要你先定。
 
 原 9/7 的转写错误分类并进 9/28：真机、真人讲话，模拟器帮不上忙。

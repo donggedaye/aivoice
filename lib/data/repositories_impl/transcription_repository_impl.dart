@@ -31,6 +31,9 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
   final AsrWorker _worker;
 
   @override
+  String get source => 'asr:sensevoice-small@int8';
+
+  @override
   Future<Transcript> transcribe(Recording recording) async {
     final separator = Platform.pathSeparator;
     final mergedPath = '${recording.dirPath}$separator$_tempMergedName';

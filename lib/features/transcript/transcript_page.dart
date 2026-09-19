@@ -63,7 +63,7 @@ class _TranscriptPageState extends ConsumerState<TranscriptPage> {
         actions: [
           if (ready && !state.transcribing)
             IconButton(
-              onPressed: controller.transcribe,
+              onPressed: () => controller.transcribe(force: true),
               icon: const Icon(Icons.refresh),
               tooltip: '重新轉寫',
             ),

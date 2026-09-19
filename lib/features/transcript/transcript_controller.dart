@@ -72,7 +72,8 @@ class TranscriptController extends Notifier<TranscriptState> {
     await transcribe();
   }
 
-  Future<void> transcribe() async {
+  /// [force] 給 AppBar 的「重新轉寫」：忽略存起來的結果重轉。
+  Future<void> transcribe({bool force = false}) async {
     final recording = ref.read(currentRecordingProvider);
     if (recording == null) {
       state = state.copyWith(error: '沒有可以轉寫的錄音');
@@ -88,7 +89,8 @@ class TranscriptController extends Notifier<TranscriptState> {
       clearTranscript: true,
     );
     try {
-      final transcript = await ref.read(transcribeLocallyProvider)(recording);
+      final transcript =
+          await ref.read(transcribeLocallyProvider)(recording, force: force);
       state = state.copyWith(transcribing: false, transcript: transcript);
     } catch (e) {
       state = state.copyWith(transcribing: false, error: describeError(e));
