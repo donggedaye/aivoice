@@ -126,7 +126,10 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 （每次任务结束后更新这一段：已完成哪几项、下一项是什么、已知问题）
 
 ### 状态
-- PLAN.md 第 1 周：9/1–9/6 已打勾，**下一项是 9/7 用真实对话测试并归类转写错误**。
+- **9/20 重排过 PLAN**：9/1–9/6 完成，9/7–9/19 停摆，剩 10 天砍掉一半以上。
+  这个月只答 Q1（分得清事实与推断）与 Q3（有没有人问价格）；
+  Q2（记忆／回访）与 Play 上架移到 10 月，砍掉的清单在 `NOT_NOW.md`。
+- **下一项是 9/21 drift 上线**（Recording / Transcript / Claim 三张表）。
 - 9/2、9/3 由本人真机验过；9/4–9/6 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
@@ -258,5 +261,12 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
 
 ### 下一项
-9/7 用 3 段真实对话测试，把转写错误按 人名/数字/中英夹杂/噪音 分类记入 `docs/asr-errors.md`。
-这一项要真机、要真人讲话，模拟器帮不上忙。
+9/21 drift 上线：Recording / Transcript / Claim 三张表 + codegen。
+完成标准是转写结果落库，从列表点开旧录音不再重新转写。
+drift 目前只写进 pubspec，没有任何代码也没跑过 codegen。
+
+**9/22 的后端卡在两件我做不到的事**：模型服务选哪家、部署到哪。
+限制是产品原则第 5 条，不能是中国大陆托管。API key 与主机要你先定。
+
+原 9/7 的转写错误分类并进 9/28：真机、真人讲话，模拟器帮不上忙。
+`docs/asr-errors.md` 的表格已经备好。
