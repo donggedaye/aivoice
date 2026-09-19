@@ -80,6 +80,15 @@ android/app/src/main/kotlin/.../
   （例：构建时 AGP 自动装了 NDK 28.2.13676358 与 SDK Platform 35，保留；实际编译仍用 27.1）
 
 ## 数据契约（App 与后端共用一份 JSON Schema，改动必须同时改两边）
+
+**权威版本是 `schema/claim.json`（9/20 写好，draft 2020-12）**，下面这段是给人看的摘要。
+三个定义：`analyzed_claim`（模型要产生的）、`claim`（存进资料库的完整版，多了 App 自己填的
+id / recording_id / created_at / source / user_action / entity_ids）、
+`analyze_response`（后端回给 App 的）。
+产品原则 2 / 3 已经写成 `if/then`：FACT・OPINION・INFERENCE 没有 evidence 会被挡，
+INFERENCE・SUGGESTION 没有 reasoning 会被挡，UNCERTAIN 没填 missing_info 会被挡。
+**产品原则 4（不做对人的判断）JSON Schema 验不了**，那是提示词与人工检查的责任。
+验证：`schema/check.py`（只依赖 jsonschema），正例与反例在 `schema/examples/`。
 ```
 Claim {
   id, recording_id,
@@ -130,7 +139,9 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
   这个月只答 Q1（分得清事实与推断）与 Q3（有没有人问价格）；
   Q2（记忆／回访）与 Play 上架移到 10 月，砍掉的清单在 `NOT_NOW.md`。
 - **9/21 drift 已上线**（只建 transcripts / transcript_segments 两张表，理由见下）。
-  下一项是 **9/22 后端 FastAPI**。
+- **9/23 的 schema 先做了**（`schema/claim.json` + 正反例 + 验证脚本）。
+  同一项里的 Analyzer 提示词 v1 还没写，等模型定案。
+- 下一项是 **9/22 后端 FastAPI**，卡在模型服务与主机要先定。
 - 9/2、9/3 由本人真机验过；9/4–9/6 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
@@ -169,6 +180,8 @@ lib/
   features/transcript/  transcript_controller.dart、transcript_page.dart
   features/recordings/  recordings_controller.dart、recordings_page.dart
   features/settings/    model_download_*.dart、settings_controller.dart、settings_page.dart
+schema/                 claim.json（App 与后端共用的契约）、check.py、
+                        examples/（analyze_response 正例、rejected 反例）
 assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
 test/                   widget_test / opencc_test / asr_worker_test / adts_test /
                         recording_store_test / app_database_test，共 30 条
@@ -227,6 +240,10 @@ AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才
 - **删除只认 id**：`RecordingStore` 自己用 `baseDir + id` 组路径，不接受外面传进来的
   任意路径，`id` 必须全是数字。免得哪天误删到 `files/models/` 那 229 MB。
   录音进行中一律挡下删除（分片还在写，删了只会留半个档）。
+- **JSON Schema 的 allOf 陷阱**：`analyzed_claim` 里写 `additionalProperties: false`，
+  `claim` 用 allOf 合成它的时候，App 自己填的 id / source 那些会被判成多余栏位，整个验不过。
+  正确写法是子定义不封闭，封闭写在使用它的地方（`analyzed_claim_strict` 与 `claim`
+  各自挂 `unevaluatedProperties: false`）。这个是写完跑 `schema/check.py` 才发现的。
 - **drift 9/21 上线，但只建两张表**：`transcripts`（表头）与 `transcript_segments`。
   不建 `recordings` 表 —— 录音列表走档案系统已经量过够快，多一张表就多一个真相来源。
   `claims` 等 9/23 `schema/claim.json` 定案再建，现在建几乎一定要再迁移一次。
@@ -270,6 +287,7 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 ### 下一项
 9/22 后端 FastAPI：单一 `/analyze`（内部跑 analyzer + verifier 两次调用）、
 设备令牌、每设备每日用量上限、部署。
+契约已经在 `schema/claim.json`，后端直接拿它验模型输出，不要另外写一份。
 
 **卡在两件我做不到的事**：模型服务选哪家、部署到哪。
 限制是产品原则第 5 条，不能是中国大陆托管。API key 与主机要你先定。

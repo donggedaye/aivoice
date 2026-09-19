@@ -1,0 +1,118 @@
+{
+  "$comment": "故意違規的例子。9/24 的客戶端校驗要能一條一條擋下來。每一筆都只犯一種錯。",
+  "cases": [
+    {
+      "why": "沒有依據的 FACT。產品原則 2：直接丟掉，不展示。",
+      "claim": {
+        "type": "FACT",
+        "category": "SUMMARY",
+        "text": "客戶年底前一定會換掉現在的系統。",
+        "evidence": [],
+        "reasoning": null,
+        "confidence": "HIGH",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null
+      }
+    },
+    {
+      "why": "沒有依據的 OPINION。同樣要擋。",
+      "claim": {
+        "type": "OPINION",
+        "category": "RISK",
+        "text": "客戶覺得我們報價太貴。",
+        "reasoning": null,
+        "confidence": "MEDIUM",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null
+      }
+    },
+    {
+      "why": "INFERENCE 沒寫 reasoning。推論一定要說得出理由。",
+      "claim": {
+        "type": "INFERENCE",
+        "category": "RISK",
+        "text": "這個案子會拖到明年。",
+        "evidence": [
+          {
+            "segment_id": "1789833654808-0019",
+            "start_ms": 121500,
+            "end_ms": 127900,
+            "quote": "這種案子我們內部簽核大概要跑兩三個月"
+          }
+        ],
+        "reasoning": null,
+        "confidence": "LOW",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null
+      }
+    },
+    {
+      "why": "confidence 是 UNCERTAIN 卻沒填 missing_info。產品原則 3：要講清楚缺什麼。",
+      "claim": {
+        "type": "FACT",
+        "category": "DECISION",
+        "text": "雙方約了下次碰面。",
+        "evidence": [
+          {
+            "segment_id": "1789833654808-0024",
+            "start_ms": 151200,
+            "end_ms": 155400,
+            "quote": "那我們下個月再約一次"
+          }
+        ],
+        "reasoning": null,
+        "confidence": "UNCERTAIN",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null
+      }
+    },
+    {
+      "why": "對人的判斷。產品原則 4：不做這種輸出。這一條 JSON Schema 擋不住，是提示詞與人工檢查的責任，放在這裡提醒。",
+      "claim": {
+        "type": "INFERENCE",
+        "category": "RISK",
+        "text": "客戶在敷衍，根本沒有要買。",
+        "evidence": [
+          {
+            "segment_id": "1789833654808-0024",
+            "start_ms": 151200,
+            "end_ms": 155400,
+            "quote": "那我們下個月再約一次"
+          }
+        ],
+        "reasoning": "講得很含糊。",
+        "confidence": "LOW",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null
+      },
+      "schema_cannot_catch": true
+    },
+    {
+      "why": "多了契約沒有的欄位。additionalProperties: false 會擋。",
+      "claim": {
+        "type": "FACT",
+        "category": "SUMMARY",
+        "text": "客戶合約明年三月到期。",
+        "evidence": [
+          {
+            "segment_id": "1789833654808-0007",
+            "start_ms": 41200,
+            "end_ms": 47800,
+            "quote": "合約明年三月到期"
+          }
+        ],
+        "reasoning": null,
+        "confidence": "HIGH",
+        "missing_info": [],
+        "owner": null,
+        "due_date": null,
+        "priority": "high"
+      }
+    }
+  ]
+}

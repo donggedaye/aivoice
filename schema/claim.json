@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aivoice.app/schema/claim-v1.json",
+  "title": "Claim v1",
+  "description": "App 與後端共用的資料契約。改動必須同時改兩邊，並提高 $id 的版本號。後端用它驗模型回來的 JSON，App 用它驗存進本機資料庫的東西。",
+  "$ref": "#/$defs/claim",
+
+  "$defs": {
+    "evidence_item": {
+      "type": "object",
+      "description": "一條 claim 的依據，指回轉寫的某一段。quote 必須是該段落裡真的出現過的字，這一點 JSON Schema 驗不了，由 Verifier 負責。",
+      "additionalProperties": false,
+      "required": ["segment_id", "start_ms", "end_ms", "quote"],
+      "properties": {
+        "segment_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "轉寫段落 id，格式 <recording_id>-0000"
+        },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 0 },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "原話。不是改寫，不是摘要。"
+        }
+      }
+    },
+
+    "analyzed_claim": {
+      "type": "object",
+      "description": "模型要產生的部分。id、recording_id、created_at、source、user_action、entity_ids 由 App 自己填，不要叫模型生。這裡刻意不封閉欄位：封閉寫在 analyzed_claim_strict 與 claim 上，不然 allOf 合成時會把 App 自己的欄位擋掉。",
+      "required": ["type", "category", "text", "confidence"],
+      "properties": {
+        "type": {
+          "enum": ["FACT", "OPINION", "INFERENCE", "SUGGESTION"],
+          "description": "FACT 對方說出口的事實；OPINION 對方表達的看法；INFERENCE 你從話裡推出來的；SUGGESTION 你建議的行動。"
+        },
+        "category": {
+          "enum": ["SUMMARY", "TODO", "DECISION", "RISK"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "台灣正體中文。一條只講一件事。"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence_item" },
+          "default": []
+        },
+        "reasoning": {
+          "type": ["string", "null"],
+          "description": "從依據到這條結論之間的推理。INFERENCE 與 SUGGESTION 必填。"
+        },
+        "confidence": {
+          "enum": ["HIGH", "MEDIUM", "LOW", "UNCERTAIN"]
+        },
+        "missing_info": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "資訊不足時要問什麼才能確定。confidence 是 UNCERTAIN 時必填。"
+        },
+        "owner": {
+          "type": ["string", "null"],
+          "description": "TODO 由誰負責。不知道就填 null，不要猜。"
+        },
+        "due_date": {
+          "type": ["string", "null"],
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "TODO 的期限，YYYY-MM-DD。不知道就填 null，不要猜。"
+        }
+      },
+
+      "allOf": [
+        {
+          "$comment": "產品原則 2：FACT / OPINION / INFERENCE 必須帶依據。沒有依據的 FACT 在客戶端直接丟掉，不展示。",
+          "if": {
+            "properties": {
+              "type": { "enum": ["FACT", "OPINION", "INFERENCE"] }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["evidence"],
+            "properties": {
+              "evidence": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "$comment": "產品原則：推論與建議要說得出理由。",
+          "if": {
+            "properties": {
+              "type": { "enum": ["INFERENCE", "SUGGESTION"] }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["reasoning"],
+            "properties": {
+              "reasoning": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "$comment": "產品原則 3：資訊不足就說不足，並講清楚缺什麼，不要猜。",
+          "if": {
+            "properties": { "confidence": { "const": "UNCERTAIN" } },
+            "required": ["confidence"]
+          },
+          "then": {
+            "required": ["missing_info"],
+            "properties": {
+              "missing_info": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+
+    "analyzed_claim_strict": {
+      "description": "模型輸出的驗收用版本：欄位不能多。",
+      "allOf": [{ "$ref": "#/$defs/analyzed_claim" }],
+      "unevaluatedProperties": false
+    },
+
+    "claim": {
+      "description": "存進本機資料庫的完整 claim：模型產生的部分，加上 App 自己填的欄位。",
+      "allOf": [
+        { "$ref": "#/$defs/analyzed_claim" },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "recording_id",
+            "user_action",
+            "created_at",
+            "source"
+          ],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "recording_id": { "type": "string", "minLength": 1 },
+            "entity_ids": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "default": [],
+              "description": "關聯到的客戶 / 人 / 專案。實體功能排在 10 月，這個月一律是空陣列。"
+            },
+            "user_action": {
+              "enum": ["CONFIRMED", "EDITED", "REJECTED", "PENDING"],
+              "default": "PENDING"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC 3339，帶時區。"
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "誰做出來的，例如 asr:sensevoice-small@int8 + llm:<model>@<prompt_version>"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "analyze_response": {
+      "type": "object",
+      "description": "後端 /analyze 回給 App 的東西。Verifier 跑完之後的結果。",
+      "additionalProperties": false,
+      "required": ["claims", "prompt_version"],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/analyzed_claim_strict" }
+        },
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "例如 analyzer_v1+verifier_v1，會寫進 Claim.source。"
+        }
+      }
+    }
+  }
+}

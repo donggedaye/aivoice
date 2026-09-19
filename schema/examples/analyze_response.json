@@ -1,0 +1,112 @@
+{
+  "prompt_version": "analyzer_v1+verifier_v1",
+  "claims": [
+    {
+      "type": "FACT",
+      "category": "SUMMARY",
+      "text": "客戶說現在的系統是 2019 年導入的，合約明年三月到期。",
+      "evidence": [
+        {
+          "segment_id": "1789833654808-0007",
+          "start_ms": 41200,
+          "end_ms": 47800,
+          "quote": "我們這套是二〇一九年上線的，合約明年三月到期"
+        }
+      ],
+      "reasoning": null,
+      "confidence": "HIGH",
+      "missing_info": [],
+      "owner": null,
+      "due_date": null
+    },
+    {
+      "type": "OPINION",
+      "category": "RISK",
+      "text": "客戶認為換系統最麻煩的是舊資料搬移。",
+      "evidence": [
+        {
+          "segment_id": "1789833654808-0012",
+          "start_ms": 78300,
+          "end_ms": 84100,
+          "quote": "要換也不是不行，就是舊資料怎麼搬我很頭痛"
+        }
+      ],
+      "reasoning": null,
+      "confidence": "HIGH",
+      "missing_info": [],
+      "owner": null,
+      "due_date": null
+    },
+    {
+      "type": "INFERENCE",
+      "category": "RISK",
+      "text": "合約到期前三個月內不談完，這一輪大概就沒機會了。",
+      "evidence": [
+        {
+          "segment_id": "1789833654808-0007",
+          "start_ms": 41200,
+          "end_ms": 47800,
+          "quote": "我們這套是二〇一九年上線的，合約明年三月到期"
+        },
+        {
+          "segment_id": "1789833654808-0019",
+          "start_ms": 121500,
+          "end_ms": 127900,
+          "quote": "這種案子我們內部簽核大概要跑兩三個月"
+        }
+      ],
+      "reasoning": "合約三月到期，對方說內部簽核要兩三個月，往前推就是十二月前要進入簽核流程。",
+      "confidence": "MEDIUM",
+      "missing_info": [],
+      "owner": null,
+      "due_date": null
+    },
+    {
+      "type": "FACT",
+      "category": "TODO",
+      "text": "業務要把資料搬移的作法整理成文件寄給客戶。",
+      "evidence": [
+        {
+          "segment_id": "1789833654808-0021",
+          "start_ms": 134000,
+          "end_ms": 139600,
+          "quote": "那我整理一份搬移的流程寄給你"
+        }
+      ],
+      "reasoning": null,
+      "confidence": "HIGH",
+      "missing_info": [],
+      "owner": "我",
+      "due_date": null
+    },
+    {
+      "type": "FACT",
+      "category": "DECISION",
+      "text": "雙方約了下次碰面，但沒有講定日期。",
+      "evidence": [
+        {
+          "segment_id": "1789833654808-0024",
+          "start_ms": 151200,
+          "end_ms": 155400,
+          "quote": "那我們下個月再約一次"
+        }
+      ],
+      "reasoning": null,
+      "confidence": "UNCERTAIN",
+      "missing_info": ["下次碰面的確切日期", "參加的人有誰"],
+      "owner": null,
+      "due_date": null
+    },
+    {
+      "type": "SUGGESTION",
+      "category": "TODO",
+      "text": "下次碰面前先確認對方的簽核流程要經過哪幾關。",
+      "evidence": [],
+      "reasoning": "對方提到內部簽核要兩三個月，但沒有講經過誰。不知道關卡就抓不準時程。",
+      "confidence": "MEDIUM",
+      "missing_info": [],
+      "owner": "我",
+      "due_date": null
+    }
+  ]
+}

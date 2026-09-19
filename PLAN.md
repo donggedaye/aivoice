@@ -45,6 +45,8 @@
 - [ ] 9/23 Claim JSON Schema（`schema/claim.json`，App 与后端共用）+ Analyzer 提示词 v1
       （`backend/prompts/analyzer_v1.md`）
       完成标准：回传合法 JSON，每条带 type 与 evidence
+      进度：**Schema 与正反例 9/20 已完成**（`schema/check.py` 跑过，0 失败）；
+      提示词还没写，等模型定案
 - [ ] 9/24 Verifier 提示词 v1 + 客户端结构校验：无 evidence 的 FACT 丢弃
       完成标准：手工构造一条无依据的 FACT，能被拦下
 - [ ] 9/25 分析卡片 UI：摘要/待办/决策/风险四区；四类标签四色；
