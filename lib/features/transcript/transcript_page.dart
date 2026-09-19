@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme.dart';
@@ -33,6 +34,29 @@ class _TranscriptPageState extends ConsumerState<TranscriptPage> {
     final ready = ref.watch(modelReadyProvider).value ?? false;
     final segments = state.transcript?.segments ?? const <TranscriptSegment>[];
 
+    // 先攔下返回，把聲音停掉再真的離開。
+    // 不能等到 dispose：那時 element 已經 defunct，改 state 會撞斷言。
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        try {
+          await controller.stop();
+        } finally {
+          if (context.mounted && context.canPop()) context.pop();
+        }
+      },
+      child: _buildScaffold(context, state, controller, ready, segments),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    TranscriptState state,
+    TranscriptController controller,
+    bool ready,
+    List<TranscriptSegment> segments,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('轉寫'),

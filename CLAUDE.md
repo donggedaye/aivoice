@@ -186,7 +186,7 @@ AsrWorker 闲置 5 分钟送 stop 让 worker 自己 free 原生记忆体。
   → 依序读 chunk_*.aac，幀在所有分片间连续编号，收满就不再读
   → 写出 segment.aac（只含该段的幀，本身就是合法 ADTS）
   → PlaybackBridge 的 MediaPlayer 播它
-  → 播完 / 换段 / 点同一段 → 停止并删掉 segment.aac
+  → 播完 / 换段 / 点同一段 / 离开转写页 → 停止并删掉 segment.aac
 不用 seek：ADTS 没有索引，播放器只能靠位元率估位置。
 AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才对得准。
 定位误差最多一幀（64 ms），跨分片边界不用特别处理。
@@ -213,7 +213,9 @@ AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才
   `/transcript` 是它的子路由，用 `context.push` 进去。
 - **不要在 State.dispose 里改 Riverpod 的 state**：那时 element 已经 defunct，
   会撞 `markNeedsBuild` 的断言，而且监听解不乾净 —— 之后每次改 state 都会再爆一次
-  （连正常点击都失效）。我为了「离开页面就停播放」试了三种写法都踩到，最后放弃这个行为。
+  （连正常点击都失效）。9/5 为了「离开页面就停播放」试了三种 dispose 写法全踩到。
+  解法是改用 `PopScope(canPop: false)` 拦下返回，**趁页面还活着**把播放停掉再 `context.pop()`，
+  完全不碰 dispose。系统返回键与 AppBar 返回箭头都会走这条。
 - **录音列表不走资料库**：目录名就是开始录音的 epoch 毫秒，时长照分片幀数实测，
   一片才 120 KB，串著读不占记忆体。现在上 drift 只是把同一份资料再抄一次。
   等 9/9 Claim 真的要存的时候再一起上。
@@ -244,8 +246,6 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
   要存下来得先有 drift，等 9/9 一起做。
 - **列表是同步一次算完的**。9 笔录音要读完所有分片才显示，目前不到 1 秒；
   录音数量上来之后要改成边算边显示或快取。
-- **离开转写页不会停止播放**。段落最长几秒，播完自己会停并删掉 segment.aac，
-  但按返回后声音还会继续。原因见上面 dispose 那条，9/6 之后再想别的做法。
 - 模拟器听不到声音，所以「点段落有对应的声音」只验到：切出来的 segment.aac
   幀对齐、时长与段落一致、位元组能在原始音档里唯一比中（例如 08:07 那段
   切在 487296 ms）。**实际听感要真机确认。**
