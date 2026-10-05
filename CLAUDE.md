@@ -82,7 +82,11 @@ android/app/src/main/kotlin/.../
 ## 数据契约（App 与后端共用一份 JSON Schema，改动必须同时改两边）
 
 **权威版本是 `schema/claim.json`（9/20 写好，draft 2020-12）**，下面这段是给人看的摘要。
-三个定义：`analyzed_claim`（模型要产生的）、`claim`（存进资料库的完整版，多了 App 自己填的
+五个定义：`evidence_item`（一条依据：segment_id + 时间戳 + 原话）、
+`analyzed_claim`（模型要产生的，刻意不封闭栏位）、
+`analyzed_claim_strict`（在前者上挂 `unevaluatedProperties: false`，不准有多余栏位；
+`schema/check.py` 拿它验反例，`analyze_response.claims` 的 items 也是它）、
+`claim`（存进资料库的完整版，多了 App 自己填的
 id / recording_id / created_at / source / user_action / entity_ids）、
 `analyze_response`（后端回给 App 的）。
 产品原则 2 / 3 已经写成 `if/then`：FACT・OPINION・INFERENCE 没有 evidence 会被挡，

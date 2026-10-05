@@ -93,7 +93,7 @@
       "schema_cannot_catch": true
     },
     {
-      "why": "多了契約沒有的欄位。additionalProperties: false 會擋。",
+      "why": "多了契約沒有的欄位。analyzed_claim_strict 的 unevaluatedProperties: false 會擋。",
       "claim": {
         "type": "FACT",
         "category": "SUMMARY",
