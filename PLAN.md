@@ -76,14 +76,19 @@
 
 ## 10 月（按 A→B→C→D 顺序做，不排日期）
 
-- [ ] 10/A claims 落库 + 客户端结构校验（9/21 延后的 `claims` 表 + 原 9/24 后半）
+- [x] 10/A claims 落库 + 客户端结构校验（9/21 延后的 `claims` 表 + 原 9/24 后半）
       完成标准：无 evidence 的 FACT 会被丢弃（要有测试证明）、drift 迁移能跑在既有资料库上、
       正例能在资料库里来回一趟不失真，`flutter analyze`、`flutter test`、
       `flutter build apk --debug` 三个都绿
       决定：按「重新转写」时连同该笔录音的 claims 一起删。段落 id 是照 VAD 的序号生成的
       （`lib/data/repositories_impl/transcription_repository_impl.dart:71`），`save` 又是先删再插，
       重转之后存着的 `segment_id` 可能无声无息地指到另一段话。依据没了，结论就不留。
-      进度：**进行中**
+      改动：建了 `analyses` / `claims` / `claim_evidence` 三张表，schemaVersion 1→2，
+      本专案第一支 `MigrationStrategy`。`analyses` 表头的理由与 `transcripts` 一样 ——
+      分不出「分析过但 0 条」与「还没分析过」就会每次点开都重送网路请求。
+      结果：`flutter analyze` 0 问题、`flutter test` 51 条全过（原 30 条 + 新增 21 条）、
+      `flutter build apk --debug` 成功。迁移在真的 v1 档案上跑过（`claim_migration_test`）。
+      未验：模拟器与真机都还没跑过，这一项没有 UI，没东西可看。
 - [ ] 10/B 分析卡片 UI + 证据回溯 + 逐条确认 / 拒绝（原 9/25、9/26、9/27）
       摘要/待办/决策/风险四区；四类标签四色；INFERENCE 默认折叠并显示依据；
       点任一条跳到转写段落并回放（复用 9/5 的回放）；UNCERTAIN 条目显示 missing_info；

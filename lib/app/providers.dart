@@ -9,11 +9,13 @@ import '../core/storage/app_database.dart';
 import '../core/storage/model_manager.dart';
 import '../core/storage/recording_store.dart';
 import '../data/local/asr_worker.dart';
+import '../data/repositories_impl/claim_repository_impl.dart';
 import '../data/repositories_impl/playback_repository_impl.dart';
 import '../data/repositories_impl/recording_repository_impl.dart';
 import '../data/repositories_impl/transcript_repository_impl.dart';
 import '../data/repositories_impl/transcription_repository_impl.dart';
 import '../domain/entities/recording.dart';
+import '../domain/repositories/claim_repository.dart';
 import '../domain/repositories/playback_repository.dart';
 import '../domain/repositories/recording_repository.dart';
 import '../domain/repositories/transcript_repository.dart';
@@ -67,7 +69,7 @@ final recordingStoreProvider = Provider<RecordingStore>(
   (ref) => const RecordingStore(),
 );
 
-/// 本機資料庫。目前只存轉寫；9/23 之後 Claim 也進這裡。
+/// 本機資料庫。轉寫與分析結果都在這裡。
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);
@@ -76,6 +78,10 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 final transcriptRepositoryProvider = Provider<TranscriptRepository>(
   (ref) => TranscriptRepositoryImpl(ref.watch(appDatabaseProvider)),
+);
+
+final claimRepositoryProvider = Provider<ClaimRepository>(
+  (ref) => ClaimRepositoryImpl(ref.watch(appDatabaseProvider)),
 );
 
 final recordingRepositoryProvider = Provider<RecordingRepository>(
@@ -120,6 +126,7 @@ final manageRecordingsProvider = Provider<ManageRecordings>(
   (ref) => ManageRecordings(
     ref.watch(recordingRepositoryProvider),
     ref.watch(transcriptRepositoryProvider),
+    ref.watch(claimRepositoryProvider),
   ),
 );
 
@@ -127,5 +134,6 @@ final transcribeLocallyProvider = Provider<TranscribeLocally>(
   (ref) => TranscribeLocally(
     ref.watch(transcriptionRepositoryProvider),
     ref.watch(transcriptRepositoryProvider),
+    ref.watch(claimRepositoryProvider),
   ),
 );

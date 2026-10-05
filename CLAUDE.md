@@ -145,7 +145,14 @@ MemoryItem { id, entity_id, kind: COMMITMENT|PREFERENCE|CONSTRAINT|OPEN_ISSUE|DE
 - **9/21 drift 已上线**（只建 transcripts / transcript_segments 两张表，理由见下）。
 - **9/23 的 schema 先做了**（`schema/claim.json` + 正反例 + 验证脚本）。
   同一项里的 Analyzer 提示词 v1 还没写，等模型定案。
-- 下一项是 **9/22 后端 FastAPI**，卡在模型服务与主机要先定。
+- **10/5 重排过 PLAN**：9 月冲刺收线，顺序翻过来 —— App 侧先做，后端最后接。
+  唯一卡住的是后端（模型服务与主机未定），其余都不卡；契约已冻结，
+  App 侧拿 `schema/examples/analyze_response.json` 当本地固件就能做完。
+  10 月清单见 `PLAN.md` 的 10/A–10/D。
+- **10/A 已完成**：claims 落库（analyses / claims / claim_evidence 三张表 + 1→2 迁移）
+  与客户端结构校验（产品原则 2／3 的闸门在 `domain/entities/claim.dart`）。
+  `flutter analyze` 0 问题、`flutter test` 51 条全过、`flutter build apk --debug` 成功。
+- 下一项是 **10/B 分析卡片 UI**，不卡。**10/C 后端仍卡在模型服务与主机要先定。**
 - 9/2、9/3 由本人真机验过；9/4–9/6 只在模拟器（x86_64，AVD `Pixel_9_Pro_XL`）验过。
 - git 干净，已推 `github.com/donggedaye/aivoice`（private）。
 
@@ -170,14 +177,16 @@ lib/
   core/platform/        recording_channel.dart、asr_channel.dart、playback_channel.dart
   core/storage/         model_manager.dart（模型清单、校验值、就绪检查）、
                         recording_store.dart（列出 / 删除录音目录，只认数字目录名）、
-                        app_database.dart + .g.dart（drift：transcripts / transcript_segments）
+                        app_database.dart + .g.dart（drift：transcripts / transcript_segments /
+                        analyses / claims / claim_evidence，schemaVersion 2）
   core/network/         model_downloader.dart（Range 续传、SHA-256、失败删档）
   core/utils/           opencc.dart（自实作 s2twp）、adts.dart（幀走访 + 按时间切幀）、
                         errors.dart（把 StateError 的「Bad state:」挡在 UI 之外）
   data/local/           asr_worker.dart（常驻辨识 isolate）
   data/repositories_impl/  recording_ / transcription_ / playback_ /
-                        transcript_repository_impl.dart
-  domain/               entities（Recording / RecordingSummary / Transcript / PlaybackEvent）、
+                        transcript_ / claim_repository_impl.dart
+  domain/               entities（Recording / RecordingSummary / Transcript / PlaybackEvent /
+                        Claim + Evidence + ClaimBatch + parseAnalyzeResponse）、
                         repositories、usecases（RecordAudio / TranscribeLocally / PlaySegment /
                         ManageRecordings）
   features/record/      record_controller.dart、record_page.dart、widgets/waveform_view.dart
@@ -188,7 +197,8 @@ schema/                 claim.json（App 与后端共用的契约）、check.py�
                         examples/（analyze_response 正例、rejected 反例）
 assets/opencc/          OpenCC 原始字典 .txt + LICENSE（约 1.1 MB，Apache-2.0）
 test/                   widget_test / opencc_test / asr_worker_test / adts_test /
-                        recording_store_test / app_database_test，共 30 条
+                        recording_store_test / app_database_test / claim_parse_test /
+                        claim_database_test / claim_migration_test，共 51 条
 ```
 
 ### 转写管线
@@ -256,6 +266,37 @@ AAC-LC 每幀固定 1024 取样，16 kHz 下正好 64 ms，直接算幀编号才
   用 `@DataClassName` 改成 `TranscriptRow` / `TranscriptSegmentRow`。
   栏位不能叫 `text`，那是 drift 的栏位建构子，改叫 `content`。
   `.g.dart` 有进版控，改完表要跑 `dart run build_runner build`。
+- **10/A 加了 analyses / claims / claim_evidence 三张表，schemaVersion 1→2**，
+  这是本专案第一支 `MigrationStrategy`（9/21 那版根本没写）。
+  `analyses` 表头跟 `transcripts` 同样的理由：全部 claim 都被挡掉会留下 0 条，
+  只看 `claims` 分不出「分析过但没留下东西」与「还没分析过」——
+  分析要花钱又有每日上限，每次点开都重送比重转更不能接受。
+  表头顺手记 `dropped_count`，这是唯一能知道提示词多常生出无依据结论的地方。
+  `evidence` 是真的子表（要按段落回溯，得查得到），主键 (claimId, ordinal) 保住顺序；
+  `missing_info` 与 `entity_ids` 存 JSON 字串，纯清单不会被查，多开两张表只是多两个真相来源。
+- **迁移测试不靠 drift_dev 的 schema 导出**：先开 v2 建好档，再 `DROP TABLE` 那三张新表
+  并把 `PRAGMA user_version` 写回 1，关掉重开。drift 判断要不要迁移只看 `user_version`，
+  所以退回来的档跟真实装置上还没升级的资料库没有分别，省掉一整套 schema 快照工具。
+- **drift 的 `dateTime()` 存 unix 秒，读回来是本地时间**，UTC 旗标会掉。
+  同一个瞬间，但 `DateTime` 物件不相等，测试会红。契约的 `created_at` 要带时区，
+  所以 `claim_repository_impl` 读回来一律 `.toUtc()`。代价是毫秒被截掉。
+- **客户端校验比 schema 严一点，是故意的**：契约写 `format: "date"`，但 jsonschema
+  预设不验 format，`2026-13-45` 位数对就过得去。十三月的待办要在手机上挡下来，
+  所以 `due_date` 除了比 pattern 还要真的能当日期解析（`DateTime.tryParse`
+  收得下 `2026-02-31` 并滚到三月，要反过来比对年月日）。
+- **一条违规丢一条，整份信封坏掉才算失败**：产品原则 2 说的是「直接丢弃，不展示」，
+  不是整批退回。所以 `Claim.fromAnalyzed` 丢 `RejectedClaim`，
+  `parseAnalyzeResponse` 收集成 `ClaimBatch.dropped`；
+  没有 `claims` 或 `prompt_version` 才丢 `StateError` 给 UI 看。
+  claim id 用 `<recording_id>-c0000`，编号照模型回来的位置算，
+  被丢掉的那几条留空号，对得上后端纪录。
+- **产品原则 4 客户端也挡不住**：`schema/examples/rejected.json` 里「客户在敷衍」那条
+  标了 `schema_cannot_catch`，`claim_parse_test` 明确断言它会被留下来 ——
+  免得日后有人以为客户端有在管这件事。那是提示词与人工检查的责任。
+- **重新转写会连带删掉该笔的 claims**。段落 id 是按 VAD 序号生的
+  （`transcription_repository_impl.dart:71`），`save` 又是先删后插，
+  重转之后存著的 `segment_id` 可能无声无息指到另一段话。依据没了，结论就不留。
+  删除录音与清空全部资料同样会带走 claims（`ManageRecordings`）。
 
 ### 模拟器上怎么验转写（模拟器麦克风只录得到静音）
 ```bash
@@ -287,14 +328,24 @@ adb shell "run-as app.aivoice.mobile cp /data/local/tmp/speech10.aac /data/data/
 - 同一段音频重复 108 次，SenseVoice 会输出 開飯／派飯／菜飯／派放 等不同结果，
   这是辨识准确度问题，9/28 归类转写错误时一并记录。
 - `flutter doctor` 报 Android license status unknown，不影响构建，忽略。
+- **`schema/check.py` 不验 `format`**：建 validator 时没传 `format_checker`，
+  jsonschema 预设把 format 当注解。所以 `due_date` 只有 pattern 那层位数检查，
+  `created_at` 的 RFC 3339 完全没有机制在验（补上 format checker 也只好一半，
+  `date-time` 还要选用相依 `rfc3339-validator`）。
+  10/A 决定不动契约，改在客户端挡严一点（见上）。后端那一侧 10/C 要自己注意。
 
 ### 下一项
-9/22 后端 FastAPI：单一 `/analyze`（内部跑 analyzer + verifier 两次调用）、
-设备令牌、每设备每日用量上限、部署。
+**10/B 分析卡片 UI**：摘要／待办／决策／风险四区、四类标签四色、
+INFERENCE 默认折叠并显示依据、点任一条跳到转写段落并回放（复用 9/5 的回放）、
+UNCERTAIN 条目显示 `missing_info`、逐条确认／拒绝。
+全程拿 `schema/examples/analyze_response.json` 当本地固件驱动，不连后端。
+落库与校验 10/A 已经做好，`claimRepositoryProvider` 可以直接用。
+照 `NOT_NOW.md`，逐条「修改」与 `claim_edits` 表不做，只做确认／拒绝。
+
+**10/C 后端 FastAPI 仍然卡在两件我做不到的事**：模型服务选哪家、部署到哪。
+限制是产品原则第 5 条，不能是中国大陆托管。API key 与主机要你先定。
+设备令牌已经定了存 App files 目录的纯档案，不加第三方套件。
 契约已经在 `schema/claim.json`，后端直接拿它验模型输出，不要另外写一份。
 
-**卡在两件我做不到的事**：模型服务选哪家、部署到哪。
-限制是产品原则第 5 条，不能是中国大陆托管。API key 与主机要你先定。
-
-原 9/7 的转写错误分类并进 9/28：真机、真人讲话，模拟器帮不上忙。
+原 9/7 的转写错误分类并进 10/D：真机、真人讲话，模拟器帮不上忙。
 `docs/asr-errors.md` 的表格已经备好。
